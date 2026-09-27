@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "omarss",
+  "productName": "Omarss",
   "version": "0.1.0",
   "identifier": "dev.omarss.app",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "omarss",
+        "title": "Omarss",
         "width": 1280,
         "height": 800,
         "minWidth": 720,
@@ -28,6 +28,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Omarss",
     "category": "News",
     "shortDescription": "Fast, keyboard-friendly RSS/Atom reader",
     "longDescription": "A fast, keyboard-friendly desktop RSS/Atom reader for Linux and Windows. Works offline with a local database; your data stays yours.",
@@ -43,6 +44,9 @@
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper"
+      },
+      "wix": {
+        "upgradeCode": "586b92e7-c31b-5a7b-8797-17cbcbb6f245"
       }
     }
   }

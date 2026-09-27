@@ -1,4 +1,4 @@
-# omarss
+# Omarss
 
 A fast, keyboard-friendly desktop RSS/Atom reader for Linux and Windows. `SPEC.md` is the source of truth.
 

@@ -165,7 +165,7 @@ jobs:
           gh release create "$TAG" ./* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$SHA" \
-            --title "omarss $VERSION" \
+            --title "Omarss $VERSION" \
             --latest \
             --generate-notes \
             --notes "Built automatically from main at $SHA.

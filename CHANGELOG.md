@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Renamed to **Omarss** in the window title, UI, installers and release names, matching the other oma apps. Commands, packages and data folders keep the lowercase `omarss`, so existing installs upgrade in place and keep their data.
 - Every merge to main publishes a numbered GitHub Release (e.g. `v0.1.7`) with Linux (`.AppImage`, `.deb`, `.rpm`) and Windows (`-setup.exe`, `.msi`) installers, after CI passes.
 - Windows installers embed the WebView2 bootstrapper; packages carry a category, description, licence and homepage.
 - Fixed `cargo test` crashing on Windows (`STATUS_ENTRYPOINT_NOT_FOUND`).

@@ -1,5 +1,5 @@
 {
-  "app.startError": "omarss could not start: {message}",
+  "app.startError": "Omarss could not start: {message}",
   "sidebar.label": "Feeds and views",
   "sidebar.views": "Views",
   "sidebar.feeds": "Feeds",

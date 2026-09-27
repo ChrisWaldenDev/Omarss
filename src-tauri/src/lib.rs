@@ -54,7 +54,7 @@ pub fn run() {
             tracing::info!(
                 version = %app.package_info().version,
                 data_dir = %paths.data_dir.display(),
-                "starting omarss"
+                "starting Omarss"
             );
 
             let store = Store::open(&paths.db_file, &paths.backups_dir).inspect_err(|err| {
@@ -69,5 +69,5 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running omarss");
+        .expect("error while running Omarss");
 }

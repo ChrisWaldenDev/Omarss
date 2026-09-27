@@ -1,6 +1,6 @@
 # RSS Reader: Product & Technical Specification
 
-> Name: **omarss**.
+> Name: **Omarss**. Technical identifiers (binary, packages, paths, protocol, identifier) are lowercase `omarss`.
 > Status: v1 spec. Audience: the coding agent implementing it, and the owner reviewing it.
 
 ---
@@ -342,7 +342,7 @@ CREATE VIRTUAL TABLE articles_fts USING fts5(
 ## 7. Fetching
 
 ### 7.1 HTTP behaviour
-- User-Agent: `omarss/<version> (+<project url>)`. Some sites block unknown agents; allow a per-feed UA override (advanced).
+- User-Agent: `Omarss/<version> (+<project url>)`. Some sites block unknown agents; allow a per-feed UA override (advanced).
 - Conditional GET with stored `ETag` / `Last-Modified`; handle `304` without parsing.
 - Timeouts: 10 s connect, 30 s total; max response size 10 MB (feeds), 5 MB (pages for extraction).
 - Redirects: follow up to 5. On `301`/`308`, update the stored feed URL. On `302`/`307`, don't.
@@ -544,7 +544,7 @@ Each milestone ends with a runnable app on both OSes and a short changelog entry
 
 | Question | Default |
 |---|---|
-| Final app name & identifier | Decided: "omarss", `dev.omarss.app` |
+| Final app name & identifier | Decided: "Omarss" (display name; technical identifiers lowercase `omarss`), `dev.omarss.app` |
 | Auto-updater: which release host? | GitHub Releases |
 | Include a "Read later" / Pocket-style saving of arbitrary URLs? | No (post-v1) |
 | Add Nextcloud News sync in v1? | No (post-v1) |
