@@ -1,0 +1,173 @@
+name: Release
+
+# Every merge to main publishes a numbered GitHub Release with Linux and Windows installers,
+# once CI has passed on that commit. (main only changes through PRs, so "push to main" means
+# "a PR was merged".) Pull requests that touch packaging run the same builds without publishing.
+#
+# Version: <major>.<minor> from src-tauri/tauri.conf.json, then the number of commits on main,
+# e.g. 0.1.42 (tag v0.1.42). Purely numeric, so it's valid for semver, .deb, .rpm and .msi, and
+# it always increases because main can't be force-pushed. See docs/DECISIONS.md.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - src-tauri/tauri.conf.json
+      - src-tauri/build.rs
+      - src-tauri/windows-app-manifest.xml
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Decide version
+    # Only release commits that landed on main in this repo and passed CI.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-22.04
+    outputs:
+      sha: ${{ steps.version.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      build: ${{ steps.version.outputs.build }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0 # the commit count is part of the version
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          base=$(jq -r .version src-tauri/tauri.conf.json)
+          version="${base%.*}.$(git rev-list --count HEAD)"
+          tag="v$version"
+          build=true
+          publish=false
+          if [ "$EVENT" = workflow_run ] || { [ "$EVENT" = workflow_dispatch ] && [ "$REF" = refs/heads/main ]; }; then
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "::notice::$tag is already released; nothing to do."
+              build=false
+            else
+              publish=true
+            fi
+          fi
+          {
+            echo "sha=$(git rev-parse HEAD)"
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "build=$build"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::version $version (publish: $publish)"
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: version
+    if: needs.version.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            bundles: deb,rpm,appimage
+          - os: windows-latest
+            bundles: nsis,msi
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Build installers
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          printf '{"version":"%s"}\n' "$VERSION" > "$RUNNER_TEMP/release.conf.json"
+          npx tauri build --bundles ${{ matrix.bundles }} --config "$RUNNER_TEMP/release.conf.json"
+
+      - name: Collect installers
+        shell: bash
+        run: |
+          mkdir -p installers
+          find src-tauri/target/release/bundle -maxdepth 2 -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*-setup.exe' -o -name '*.msi' \) \
+            -exec cp {} installers/ \;
+          ls -l installers
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-${{ runner.os }}
+          path: installers/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish release
+    needs: [version, build]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: installers
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+          SHA: ${{ needs.version.outputs.sha }}
+        run: |
+          cd installers
+          sha256sum -- * > SHA256SUMS.txt
+          gh release create "$TAG" ./* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SHA" \
+            --title "omarss $VERSION" \
+            --latest \
+            --generate-notes \
+            --notes "Built automatically from main at $SHA.
+
+          Installers: Linux \`.AppImage\`, \`.deb\` and \`.rpm\`; Windows \`-setup.exe\` (NSIS) and \`.msi\`. The Windows installers are not code-signed yet, so SmartScreen may warn on first run."
