@@ -17,11 +17,18 @@ pub struct Migration {
 }
 
 /// All migrations, in order. Versions must be 1, 2, 3, … with no gaps.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "0001_init",
-    sql: include_str!("../../migrations/0001_init.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "0001_init",
+        sql: include_str!("../../migrations/0001_init.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "0002_list_indexes",
+        sql: include_str!("../../migrations/0002_list_indexes.sql"),
+    },
+];
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MigrationReport {

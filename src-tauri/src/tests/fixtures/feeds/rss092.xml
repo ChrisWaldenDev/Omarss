@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<rss version="0.92">
+<channel>
+<title>Radio Hour</title>
+<link>http://radio.example/</link>
+<description>Weekly show</description>
+<item>
+<title>Show 10</title>
+<description>&lt;p&gt;Music &amp;amp; talk&lt;/p&gt;</description>
+<enclosure url="http://radio.example/show10.mp3" length="5588242" type="audio/mpeg"/>
+</item>
+</channel>
+</rss>

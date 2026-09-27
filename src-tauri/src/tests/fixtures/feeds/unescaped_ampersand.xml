@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Salt & Pepper</title><link>https://salt.example/?a=1&b=2</link><description>Food & drink</description>
+<item><title>Fish & chips</title><link>https://salt.example/fish?x=1&y=2</link><guid>sp-1</guid><description>Crispy & hot &copy; 2024</description></item>
+</channel></rss>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.example/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://video.example/feeds/videos.xml?channel_id=UC123"/>
+ <id>yt:channel:UC123</id>
+ <yt:channelId>UC123</yt:channelId>
+ <title>Woodworking Weekly</title>
+ <link rel="alternate" href="https://video.example/channel/UC123"/>
+ <author><name>Woodworking Weekly</name><uri>https://video.example/channel/UC123</uri></author>
+ <published>2019-01-01T00:00:00+00:00</published>
+ <entry>
+  <id>yt:video:abc123</id>
+  <yt:videoId>abc123</yt:videoId>
+  <yt:channelId>UC123</yt:channelId>
+  <title>Building a bench</title>
+  <link rel="alternate" href="https://video.example/watch?v=abc123"/>
+  <author><name>Woodworking Weekly</name><uri>https://video.example/channel/UC123</uri></author>
+  <published>2024-09-01T15:00:00+00:00</published>
+  <updated>2024-09-02T10:00:00+00:00</updated>
+  <media:group>
+   <media:title>Building a bench</media:title>
+   <media:content url="https://video.example/v/abc123?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i.video.example/vi/abc123/hqdefault.jpg" width="480" height="360"/>
+   <media:description>Oak, glue and patience.</media:description>
+   <media:community><media:starRating count="120" average="5.00" min="1" max="5"/><media:statistics views="4000"/></media:community>
+  </media:group>
+ </entry>
+</feed>

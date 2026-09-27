@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Smart Quotes</title><link>https://quotes.example/</link><description>x</description>
+<item><title>“Quoted” – and ’tis</title><guid>q1</guid></item>
+</channel></rss>

@@ -11,8 +11,13 @@ pub type AppResult<T> = Result<T, AppError>;
 pub enum ErrorKind {
     Database,
     Io,
+    Network,
+    /// The document isn't a feed we can read.
+    InvalidFeed,
     NotFound,
     InvalidInput,
+    /// Would create a duplicate, e.g. subscribing to a feed twice.
+    Conflict,
     Internal,
 }
 
@@ -47,6 +52,18 @@ impl AppError {
 
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new(ErrorKind::Internal, message)
+    }
+
+    pub fn network(message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::Network, message)
+    }
+
+    pub fn invalid_feed(message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::InvalidFeed, message)
+    }
+
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::Conflict, message)
     }
 }
 

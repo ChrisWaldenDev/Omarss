@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Evil Feed</title><link>https://evil.example/</link><description>x</description>
+<item><title>Scripts</title><guid>x1</guid><link>https://evil.example/1</link><description><![CDATA[<p onclick="alert(1)">Hi<script>alert('xss')</script><img src="x" onerror="alert(2)"><a href="javascript:alert(3)">click</a><iframe src="https://evil.example/frame"></iframe><style>body{display:none}</style><span style="color:red">styled</span></p>]]></description></item>
+<item><title><![CDATA[<script>alert('title')</script>Title]]></title><guid>x2</guid><description><![CDATA[<svg onload=alert(4)><a href="data:text/html,<script>alert(5)</script>">data</a>]]></description></item>
+</channel></rss>

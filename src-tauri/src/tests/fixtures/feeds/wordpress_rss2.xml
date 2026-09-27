@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/">
+<channel>
+	<title>Garden Notes</title>
+	<atom:link href="https://garden.example/feed/" rel="self" type="application/rss+xml" />
+	<link>https://garden.example</link>
+	<description>Growing things, slowly</description>
+	<lastBuildDate>Mon, 02 Sep 2024 09:12:44 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>hourly</sy:updatePeriod>
+	<sy:updateFrequency>1</sy:updateFrequency>
+	<generator>https://wordpress.example/?v=6.6</generator>
+	<image>
+		<url>https://garden.example/wp-content/uploads/cropped-icon-32x32.png</url>
+		<title>Garden Notes</title>
+		<link>https://garden.example</link>
+		<width>32</width><height>32</height>
+	</image>
+	<item>
+		<title>Tomatoes in September</title>
+		<link>https://garden.example/2024/09/02/tomatoes-in-september/</link>
+		<comments>https://garden.example/2024/09/02/tomatoes-in-september/#respond</comments>
+		<dc:creator><![CDATA[Priya]]></dc:creator>
+		<pubDate>Mon, 02 Sep 2024 09:12:44 +0000</pubDate>
+		<category><![CDATA[Vegetables]]></category>
+		<guid isPermaLink="false">https://garden.example/?p=412</guid>
+		<description><![CDATA[The last of the tomatoes are ripening on the vine, and the question is always the same: pick now or wait? [&#8230;]]]></description>
+		<content:encoded><![CDATA[<p>The last of the tomatoes are ripening on the vine.</p>
+<figure class="wp-block-image"><img src="https://garden.example/wp-content/uploads/tomatoes.jpg" alt="Tomatoes" width="800" height="600" srcset="https://garden.example/wp-content/uploads/tomatoes.jpg 800w, https://garden.example/wp-content/uploads/tomatoes-300x225.jpg 300w" /><figcaption>Late tomatoes</figcaption></figure>
+<p>Pick them when they <em>blush</em>.</p>]]></content:encoded>
+		<wfw:commentRss>https://garden.example/2024/09/02/tomatoes-in-september/feed/</wfw:commentRss>
+		<slash:comments>3</slash:comments>
+	</item>
+	<item>
+		<title>Saving seeds</title>
+		<link>https://garden.example/2024/08/20/saving-seeds/</link>
+		<dc:creator><![CDATA[Priya]]></dc:creator>
+		<pubDate>Tue, 20 Aug 2024 18:00:00 +0000</pubDate>
+		<guid isPermaLink="false">https://garden.example/?p=398</guid>
+		<description><![CDATA[Dry them properly.]]></description>
+		<content:encoded><![CDATA[<p>Dry them properly, label everything.</p>]]></content:encoded>
+	</item>
+</channel>
+</rss>

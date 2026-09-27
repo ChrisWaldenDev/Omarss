@@ -3,3 +3,5 @@
 *.png binary
 *.ico binary
 *.icns binary
+# Feed fixtures include deliberately mis-encoded files; never normalise them.
+src-tauri/src/tests/fixtures/** -text

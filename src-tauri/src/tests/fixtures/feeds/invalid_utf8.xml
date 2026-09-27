@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Invalid ÿ bytes</title><link>https://invalid.example/</link><description>x</description>
+<item><title>Broken þ title</title><guid>i1</guid></item>
+</channel></rss>

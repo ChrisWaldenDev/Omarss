@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Relative Rob</title><link>/</link><description>relative links</description>
+<item><title>With link</title><link>/posts/1.html</link><guid>rob-1</guid><description>&lt;p&gt;&lt;img src="images/1.png"&gt; &lt;a href="../about"&gt;About&lt;/a&gt;&lt;/p&gt;</description></item>
+<item><title>Without link</title><guid>rob-2</guid><description>&lt;a href="notes/2.html"&gt;notes&lt;/a&gt;</description></item>
+</channel></rss>

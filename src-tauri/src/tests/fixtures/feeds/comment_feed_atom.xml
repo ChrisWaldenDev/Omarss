@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Comments on: A post</title><id>urn:comments</id><updated>2024-09-02T00:00:00Z</updated><link rel="alternate" href="https://garden.example/2024/09/02/post/"/><entry><title>By: Visitor</title><id>urn:comments:1</id><updated>2024-09-02T00:00:00Z</updated><link href="https://garden.example/2024/09/02/post/#comment-1"/><content type="text">Nice post!
+Second line.
+
+New paragraph.</content></entry></feed>

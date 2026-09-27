@@ -35,6 +35,22 @@ pub struct ArticleQuery {
     pub sort: SortOrder,
 }
 
+/// Position in an article list; pass back to get the next page (keyset pagination).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArticleCursor {
+    pub published_at: i64,
+    pub id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArticlePage {
+    pub items: Vec<ArticleListItem>,
+    /// `None` when this is the last page.
+    pub next: Option<ArticleCursor>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Sidebar {
@@ -42,6 +58,8 @@ pub struct Sidebar {
     pub folders: Vec<FolderNode>,
     /// Feeds that are not in any folder.
     pub feeds: Vec<FeedNode>,
+    /// Starred articles kept from unsubscribed feeds, if there are any.
+    pub deleted_feeds: Option<FeedNode>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Type)]
@@ -67,10 +85,15 @@ pub struct FolderNode {
 pub struct FeedNode {
     pub id: i64,
     pub folder_id: Option<i64>,
+    /// Custom title if set, else the feed's own title.
     pub title: String,
     pub site_url: Option<String>,
     pub unread_count: u32,
     pub error_count: u32,
+    pub last_error: Option<String>,
+    /// File name of the cached favicon (served as `omarss-img://…/icon/<name>`).
+    pub icon: Option<String>,
+    pub paused: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -110,4 +133,106 @@ pub struct Enclosure {
     pub url: String,
     pub mime_type: Option<String>,
     pub length: Option<i64>,
+}
+
+/// A feed found by discovery (SPEC §6.1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredFeed {
+    pub url: String,
+    pub title: Option<String>,
+}
+
+/// What a feed looks like before subscribing (SPEC §6.1: title and the last 5 items).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedPreview {
+    pub url: String,
+    pub title: String,
+    pub site_url: Option<String>,
+    pub items: Vec<PreviewItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewItem {
+    pub title: String,
+    pub url: Option<String>,
+    pub published_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscribeRequest {
+    pub url: String,
+    pub folder_id: Option<i64>,
+    /// Optional custom title.
+    pub title: Option<String>,
+}
+
+/// Everything the "Edit feed" dialog shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedDetails {
+    pub id: i64,
+    pub url: String,
+    /// The title the feed itself provides.
+    pub title: String,
+    pub custom_title: Option<String>,
+    pub site_url: Option<String>,
+    pub folder_id: Option<i64>,
+    /// Refresh interval override in seconds; `None` uses the global setting, `0` means
+    /// manual refresh only.
+    pub fetch_interval: Option<i64>,
+    pub paused: bool,
+    pub error_count: u32,
+    pub last_error: Option<String>,
+    pub last_fetched_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedUpdate {
+    /// Empty or `None` clears the custom title.
+    pub custom_title: Option<String>,
+    pub folder_id: Option<i64>,
+    /// See [`FeedDetails::fetch_interval`].
+    pub fetch_interval: Option<i64>,
+    pub paused: bool,
+}
+
+/// The full sidebar order after a drag and drop: folders top to bottom, then every feed top
+/// to bottom with the folder it now belongs to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SidebarOrder {
+    pub folders: Vec<i64>,
+    pub feeds: Vec<FeedPlacement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedPlacement {
+    pub id: i64,
+    pub folder_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RefreshTarget {
+    All,
+    Feed { id: i64 },
+    Folder { id: i64 },
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshStatus {
+    pub running: bool,
+    pub done: u32,
+    pub total: u32,
+    /// Every feed failed to connect in the last run, so automatic refresh is waiting for the
+    /// network to come back (SPEC §7.2).
+    pub offline: bool,
+    pub last_finished_at: Option<i64>,
 }

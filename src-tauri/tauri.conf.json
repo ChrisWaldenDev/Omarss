@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Omarss",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "dev.omarss.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -21,8 +21,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' omarss-img: data:; script-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost",
-      "devCsp": "default-src 'self'; img-src 'self' omarss-img: data:; script-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1420"
+      "csp": "default-src 'self'; img-src 'self' omarss-img: http://omarss-img.localhost data:; script-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost",
+      "devCsp": "default-src 'self'; img-src 'self' omarss-img: http://omarss-img.localhost data:; script-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1420"
     }
   },
   "bundle": {

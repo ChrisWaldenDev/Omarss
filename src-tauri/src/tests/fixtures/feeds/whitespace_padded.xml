@@ -1,0 +1,11 @@
+
+
+
+   <?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>
+      Padded   Title
+   </title><link>https://padded.example/</link><description>x</description>
+<item><title>
+   Spaced
+   out
+</title><guid>  pad-1  </guid></item></channel></rss>

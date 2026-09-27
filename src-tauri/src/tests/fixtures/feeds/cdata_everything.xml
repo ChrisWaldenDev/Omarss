@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title><![CDATA[CDATA Corner]]></title><link><![CDATA[https://cdata.example/]]></link><description><![CDATA[<b>all</b> in cdata]]></description>
+<item><title><![CDATA[Vec<T> & friends]]></title><link><![CDATA[https://cdata.example/vec]]></link><guid><![CDATA[c1]]></guid><description><![CDATA[<p>Generic <code>Vec&lt;T&gt;</code> & more</p>]]></description></item>
+</channel></rss>
