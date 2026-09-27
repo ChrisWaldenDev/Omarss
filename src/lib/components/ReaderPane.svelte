@@ -1,17 +1,32 @@
 <script lang="ts">
-  import { api } from "../api";
+  import { api, errorMessage } from "../api";
   import { fileSize, fullDate } from "../format";
   import { t } from "../i18n";
-  import { articles } from "../stores/articles.svelte";
+  import { articles } from "../stores/app.svelte";
+  import { toasts } from "../stores/toasts.svelte";
   import Icon from "./Icon.svelte";
 
   const article = $derived(articles.article);
   let scroller = $state<HTMLElement>();
+  let content = $state<HTMLElement>();
 
   // Start each article at the top.
   $effect(() => {
     if (article && scroller) scroller.scrollTop = 0;
   });
+
+  // Remote images load through the image proxy (a later milestone); until then the content
+  // security policy blocks them, so hide them instead of showing broken-image icons.
+  $effect(() => {
+    void article?.contentHtml;
+    for (const img of content?.querySelectorAll("img") ?? []) {
+      img.addEventListener("error", () => img.classList.add("blocked"), { once: true });
+    }
+  });
+
+  function act(action: Promise<void>) {
+    action.catch((error) => toasts.show(t("error.action", { message: errorMessage(error) })));
+  }
 
   function openExternal(url: string) {
     api.openExternal(url).catch((error) => console.error("open_external failed", error));
@@ -46,18 +61,34 @@
             </time>
           {/if}
         </p>
-        {#if article.url}
-          {@const url = article.url}
-          <button class="open" onclick={() => openExternal(url)}>
-            <Icon name="external" size={14} />
-            {t("reader.openOriginal")}
+        <div class="toolbar">
+          {#if article.url}
+            {@const url = article.url}
+            <button class="tool" onclick={() => openExternal(url)}>
+              <Icon name="external" size={14} />
+              {t("reader.openOriginal")}
+            </button>
+          {/if}
+          <button
+            class="tool"
+            aria-pressed={article.isStarred}
+            onclick={() => act(articles.toggleStar(article.id))}
+          >
+            <span class="star-icon" class:on={article.isStarred}>
+              <Icon name="star" size={14} filled={article.isStarred} />
+            </span>
+            {article.isStarred ? t("reader.unstar") : t("reader.star")}
           </button>
-        {/if}
+          <button class="tool" onclick={() => act(articles.setRead(article.id, !article.isRead))}>
+            <Icon name={article.isRead ? "mail" : "mailOpen"} size={14} />
+            {article.isRead ? t("reader.markUnread") : t("reader.markRead")}
+          </button>
+        </div>
       </header>
 
       <!-- Content is sanitised by the backend before it is stored (SPEC §8.3). -->
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-      <div class="content" onclick={onContentClick}>
+      <div class="content" bind:this={content} onclick={onContentClick}>
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         {@html article.contentHtml}
       </div>
@@ -140,7 +171,13 @@
     font-size: 0.85rem;
   }
 
-  .open {
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tool {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -152,8 +189,20 @@
     font-size: 0.85rem;
   }
 
-  .open:hover {
+  .tool:hover {
     border-color: var(--accent);
+  }
+
+  .star-icon {
+    display: grid;
+  }
+
+  .star-icon.on {
+    color: var(--star);
+  }
+
+  .content :global(img.blocked) {
+    display: none;
   }
 
   .content {
