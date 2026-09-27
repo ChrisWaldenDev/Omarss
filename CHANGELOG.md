@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Every merge to main publishes a numbered GitHub Release (e.g. `v0.1.7`) with Linux (`.AppImage`, `.deb`, `.rpm`) and Windows (`-setup.exe`, `.msi`) installers, after CI passes.
+- Windows installers embed the WebView2 bootstrapper; packages carry a category, description, licence and homepage.
+- Fixed `cargo test` crashing on Windows (`STATUS_ENTRYPOINT_NOT_FOUND`).
+- The startup log reports the bundle version.
+
 ## 0.1.0: M1 Skeleton (2026-09-27)
 
 - Tauri 2 app with a Svelte 5 + TypeScript + Vite frontend, targeting Linux and Windows.

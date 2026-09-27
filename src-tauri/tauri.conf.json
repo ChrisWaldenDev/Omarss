@@ -28,12 +28,22 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "News",
+    "shortDescription": "Fast, keyboard-friendly RSS/Atom reader",
+    "longDescription": "A fast, keyboard-friendly desktop RSS/Atom reader for Linux and Windows. Works offline with a local database; your data stays yours.",
+    "homepage": "https://github.com/ChrisWaldenDev/omarss",
+    "license": "MIT",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
   }
 }

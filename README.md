@@ -4,6 +4,10 @@ A fast, keyboard-friendly desktop RSS/Atom reader for Linux and Windows. `SPEC.m
 
 **Status:** M1 (skeleton). The UI shows built-in demo data; real feeds arrive in M2.
 
+## Download
+
+Every merge to `main` publishes installers on the [Releases page](https://github.com/ChrisWaldenDev/omarss/releases): `.AppImage`, `.deb` and `.rpm` for Linux, and `-setup.exe` or `.msi` for Windows. The Windows installers are not code-signed yet, so SmartScreen may warn the first time you run them.
+
 ## Development
 
 Prerequisites: stable Rust, Node.js 22.12 or newer with npm, and the [Tauri system dependencies](https://v2.tauri.app/start/prerequisites/) (on Linux, `webkit2gtk-4.1` and friends).
