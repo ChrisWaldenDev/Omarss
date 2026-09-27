@@ -55,7 +55,7 @@
 <nav class="sidebar" aria-label={t("sidebar.label")}>
   <header class="brand">
     <img src="/logo.svg" alt="" width="22" height="22" />
-    <span>omarss</span>
+    <span>Omarss</span>
   </header>
 
   <div class="scroll">

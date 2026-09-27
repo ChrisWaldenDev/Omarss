@@ -54,8 +54,8 @@ pub fn migrate(
 
     if current > latest {
         return Err(AppError::database(format!(
-            "This database was created by a newer version of omarss (schema v{current}; \
-             this version supports up to v{latest}). Please update omarss."
+            "This database was created by a newer version of Omarss (schema v{current}; \
+             this version supports up to v{latest}). Please update Omarss."
         )));
     }
     if current == latest {

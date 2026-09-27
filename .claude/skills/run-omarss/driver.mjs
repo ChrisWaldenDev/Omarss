@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Driver for the omarss Tauri app, for agents.
+// Driver for the Omarss Tauri app, for agents.
 //
 // Launches a debug build on a hidden Hyprland special workspace (no window on the user's
 // screen, no focus stealing) with an isolated data dir, then drives it through WebKitGTK's

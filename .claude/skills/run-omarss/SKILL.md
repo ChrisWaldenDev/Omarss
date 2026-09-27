@@ -1,9 +1,9 @@
 ---
 name: run-omarss
-description: Build, run, and drive the omarss Tauri desktop app (RSS reader). Use when asked to start or launch omarss, check that the app launches, take a screenshot of its UI, click through it, call its backend commands over IPC, inspect its SQLite database, or run its tests.
+description: Build, run, and drive the Omarss Tauri desktop app (RSS reader). Use when asked to start or launch Omarss, check that the app launches, take a screenshot of its UI, click through it, call its backend commands over IPC, inspect its SQLite database, or run its tests.
 ---
 
-omarss is a Tauri 2 app (Rust backend, Svelte frontend in WebKitGTK). Agents drive it with
+Omarss is a Tauri 2 app (Rust backend, Svelte frontend in WebKitGTK). Agents drive it with
 `.claude/skills/run-omarss/driver.mjs`. The driver builds a debug binary and launches it on a
 **hidden Hyprland special workspace**: no window on the user's screen and no stolen focus. The
 app gets an isolated data dir, and the driver talks to it through WebKitGTK's remote inspector.

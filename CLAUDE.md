@@ -1,4 +1,4 @@
-# omarss (RSS reader)
+# Omarss (RSS reader)
 
 `SPEC.md` is the source of truth. Read it fully before starting any work, and follow §0.
 
