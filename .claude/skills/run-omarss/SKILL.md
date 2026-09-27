@@ -25,20 +25,38 @@ npm install
 
 ## Run (agent path)
 
+The app starts with no feeds. `fixtures` serves a local test site (a blog page whose
+`<link rel="alternate">` points at its feed, a favicon, a podcast, a 1,500-item feed, and the
+parser fixtures), so subscribing needs no internet:
+
 ```bash
-node .claude/skills/run-omarss/driver.mjs launch --fresh   # build (~35 s cold, seconds warm) + start with an empty DB
-node .claude/skills/run-omarss/driver.mjs text ".list-pane h1"
-node .claude/skills/run-omarss/driver.mjs click-text "Starred"
-node .claude/skills/run-omarss/driver.mjs click ".row"
-node .claude/skills/run-omarss/driver.mjs ss 01-article      # -> /tmp/omarss-driver/shots/01-article.png
+node .claude/skills/run-omarss/driver.mjs fixtures                 # background server on 127.0.0.1:9230
+node .claude/skills/run-omarss/driver.mjs launch --fresh           # build (~35 s cold, seconds warm) + start with an empty DB
+node .claude/skills/run-omarss/driver.mjs invoke subscribe_feed '{"request": {"url": "http://127.0.0.1:9230/blog/feed.xml", "folderId": null, "title": null}}'
+node .claude/skills/run-omarss/driver.mjs eval "location.reload()"  # the UI reloads its data after a subscribe made over IPC
+sleep 2                                                             # let the reloaded page mount
+node .claude/skills/run-omarss/driver.mjs click "button.row"       # open the newest article
+node .claude/skills/run-omarss/driver.mjs ss 01-article            # -> /tmp/omarss-driver/shots/01-article.png
 node .claude/skills/run-omarss/driver.mjs quit
+node .claude/skills/run-omarss/driver.mjs fixtures stop
 ```
 
 Look at the screenshot (Read the PNG). It's the 1280×800 viewport.
 
+To go through the real Add feed dialog (discovery → preview → subscribe) instead of `invoke`:
+
+```bash
+node .claude/skills/run-omarss/driver.mjs click-text "Add a feed"   # the welcome button; the sidebar's + works too
+node .claude/skills/run-omarss/driver.mjs eval "(() => { const i = document.querySelector('dialog input'); i.value = 'http://127.0.0.1:9230/blog/'; i.dispatchEvent(new Event('input', {bubbles: true})); })()"
+node .claude/skills/run-omarss/driver.mjs click "dialog button[type=submit]"   # discovers the feed, shows the preview
+sleep 1                                                             # discovery + preview fetch
+node .claude/skills/run-omarss/driver.mjs click-text "Subscribe"
+```
+
 | command | what it does |
 |---|---|
 | `launch [--fresh] [--no-build] [--dev]` | build with `tauri build --debug`, start hidden, wait until the Svelte app has mounted. `--fresh` wipes the data dir; `--no-build` reuses the last driver build; `--dev` runs `npx tauri dev` (Vite HMR) instead |
+| `fixtures [stop]` | start/stop the local test site on `127.0.0.1:9230` (`/blog/`, `/blog/feed.xml`, `/podcast.xml`, `/big.xml`, `/feeds/<fixture>`) |
 | `status` | running? pid, window size, data/log/screenshot paths |
 | `text [css]` | `innerText` of an element (default `body`) |
 | `click <css>` | DOM `.click()` on the first match; prints `NOT_FOUND` and exits 1 if missing |
@@ -55,14 +73,16 @@ Examples that ran:
 
 ```bash
 node .claude/skills/run-omarss/driver.mjs click 'input[name=theme][value=light]'
-node .claude/skills/run-omarss/driver.mjs db "select key, value from settings"
+node .claude/skills/run-omarss/driver.mjs db "select id, title, error_count, icon_path from feeds"
+node .claude/skills/run-omarss/driver.mjs invoke get_refresh_status
 node .claude/skills/run-omarss/driver.mjs invoke get_article '{"id": 99999}'
-node .claude/skills/run-omarss/driver.mjs eval "document.documentElement.dataset.theme"
+node .claude/skills/run-omarss/driver.mjs click "button[aria-label='Refresh all']"
+node .claude/skills/run-omarss/driver.mjs invoke preview_feed '{"url": "https://expired.badssl.com/"}'   # TLS errors are refused
 node .claude/skills/run-omarss/driver.mjs launch --dev && node .claude/skills/run-omarss/driver.mjs console
 ```
 
 Env overrides: `OMARSS_DRIVER_DIR` (default `/tmp/omarss-driver`), `OMARSS_INSPECTOR_PORT`
-(default `9227`).
+(default `9227`), `OMARSS_FIXTURES_PORT` (default `9230`).
 
 ## Run (human path)
 
@@ -73,15 +93,17 @@ npx tauri dev    # window opens on the current workspace, hot reload; close the 
 ## Test
 
 ```bash
-npm test                   # Vitest: 25 tests
+npm test                   # Vitest
 npm run check              # svelte-check
 npm run lint && npm run format:check
-cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check   # 28 tests
+cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check
 npm run gen:bindings       # regenerate src/lib/types.ts from the Rust commands/types
 ```
 
-For backend-only changes, `cargo test <name>` in `src-tauri/` is the fastest loop. Use
-`invoke` to check a command end-to-end through real IPC.
+For backend-only changes, `cargo test <name>` in `src-tauri/` is the fastest loop. The Rust
+tests include parsing fixtures (`src-tauri/src/tests/fixtures/feeds/`) and a mock HTTP server
+(wiremock) for fetch/refresh behaviour. Use `invoke` to check a command end-to-end through real
+IPC.
 
 ## Gotchas
 
@@ -104,9 +126,25 @@ For backend-only changes, `cargo test <name>` in `src-tauri/` is the fastest loo
   in `eval`. Svelte updates (microtasks), IPC and `Page.snapshotRect` screenshots all work.
 - **There's no pointer or keyboard injection.** Clicks are DOM `.click()`. Use `eval` for
   anything else.
+- **The article list is virtualised.** Only the ~15 visible rows exist in the DOM, and pages
+  of 100 load as you scroll. To reach later rows, scroll `.list-pane .viewport`
+  (`vp.scrollTop = vp.scrollHeight; vp.dispatchEvent(new Event('scroll'))`). Article rows are
+  `button.row`; the list's own wrapper divs are `.virtual-row`.
+- **Type full `http://` URLs for the fixtures.** A bare address like `127.0.0.1:9230/blog/` is
+  treated as `https://…` (what users expect for real sites), and the fixture server only
+  speaks HTTP.
+- **Subscribing over `invoke` doesn't refresh the UI.** The dialog path reloads the sidebar
+  itself; after an `invoke`, run `eval "location.reload()"`.
+- **Context menus and drag and drop can be driven with synthetic events.** For example
+  `el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, clientX: 100, clientY: 300}))`,
+  or `new DragEvent('dragstart' | 'dragover' | 'drop', {bubbles: true, cancelable: true,
+  dataTransfer: new DataTransfer()})` on the sidebar rows. Read the DOM after a short wait:
+  Svelte renders the menu on the next tick.
+- **Remote images in articles don't load yet.** The CSP only allows `omarss-img:` images, and
+  the image proxy arrives in M3. The reader hides blocked images.
 - **The article list defaults to unread-only.** A feed with 0 unread shows "You're all caught
-  up", and `click .row` gives `NOT_FOUND`. Run `click-text "All"` first. (`click-text "All"`
-  hits the filter button, not "All articles": exact matches win.)
+  up", and `click "button.row"` gives `NOT_FOUND`. Run `click-text "All"` first.
+  (`click-text "All"` hits the filter button, not "All articles": exact matches win.)
 - **Debug launches rewrite `src/lib/types.ts`** if Rust IPC types changed, by design. Expect
   a diff in git; commit it.
 - **Your real data is untouched.** The app gets `XDG_DATA_HOME=/tmp/omarss-driver/data`.

@@ -9,8 +9,9 @@
 //
 // Requires Node >= 22.5 (global WebSocket, node:sqlite) and a Hyprland session.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 
 const UNIT = path.resolve(import.meta.dirname, "../../..");
@@ -27,6 +28,10 @@ const LAUNCH_SCRIPT = path.join(DIR, "launch.sh");
 // http://localhost:1420), which would overwrite a `tauri build --debug` binary and vice versa.
 const TARGET_DIR = path.join(UNIT, "src-tauri/target/driver");
 const BINARY = path.join(TARGET_DIR, "debug/omarss");
+const FIXTURES_PORT = Number(process.env.OMARSS_FIXTURES_PORT ?? 9230);
+const FIXTURES_PID = path.join(DIR, "fixtures.pid");
+const FEED_FIXTURES = path.join(UNIT, "src-tauri/src/tests/fixtures/feeds");
+const SITE_ICON = path.join(UNIT, "src-tauri/icons/32x32.png");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ANSI_ESCAPE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
@@ -69,6 +74,132 @@ function tailLog(lines = 30) {
     .filter(Boolean)
     .slice(-lines)
     .join("\n");
+}
+
+// ---------------------------------------------------------------- local fixture site
+
+const fixturesOrigin = () => `http://127.0.0.1:${FIXTURES_PORT}`;
+
+async function fixturesUp() {
+  try {
+    const res = await fetch(`${fixturesOrigin()}/health`, { signal: AbortSignal.timeout(500) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function stopFixtures() {
+  try {
+    process.kill(Number(fs.readFileSync(FIXTURES_PID, "utf8")), "SIGTERM");
+    console.log("fixtures stopped");
+  } catch {
+    console.log("fixtures were not running");
+  }
+  fs.rmSync(FIXTURES_PID, { force: true });
+}
+
+const escapeXml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+function blogFeed(origin) {
+  const now = Date.now();
+  const topics = [
+    "Why small tools win",
+    "Notes on caching",
+    "A week without notifications",
+    "Reading on paper again",
+    "The joy of plain text",
+    "Keyboard-first software",
+    "On deleting code",
+    "Offline first, still",
+    "Fonts for long reading",
+    "What I learned shipping twice a week",
+    "Rust for the rest of us",
+    "Old hardware, new tricks",
+  ];
+  const items = topics.map((title, i) => {
+    const date = new Date(now - i * 5 * 3600 * 1000).toUTCString();
+    const body =
+      `<p>${escapeXml(title)}. This is post ${i + 1} of the local test blog.</p>` +
+      `<p>It links to <a href="/blog/posts/${i + 1}.html">itself</a> and has <strong>formatting</strong>.</p>` +
+      (i === 0 ? "<pre><code>fn main() {}</code></pre>" : "");
+    return (
+      `<item><title>${escapeXml(title)}</title><link>${origin}/blog/posts/${i + 1}.html</link>` +
+      `<guid>test-blog-${i + 1}</guid><pubDate>${date}</pubDate><dc:creator>Test Author</dc:creator>` +
+      `<description><![CDATA[${body}]]></description></item>`
+    );
+  });
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
+    `<channel><title>Local Test Blog</title><link>${origin}/blog/</link><description>Served by the omarss driver</description>` +
+    `${items.join("")}</channel></rss>`
+  );
+}
+
+function podcastFeed(origin) {
+  const date = new Date().toUTCString();
+  return (
+    `<?xml version="1.0"?><rss version="2.0"><channel><title>Local Test Podcast</title><link>${origin}/</link>` +
+    `<description>x</description><item><title>Episode 1: Hello</title><guid>pod-1</guid><pubDate>${date}</pubDate>` +
+    `<description>Our first episode.</description>` +
+    `<enclosure url="${origin}/ep1.mp3" length="24000000" type="audio/mpeg"/></item></channel></rss>`
+  );
+}
+
+/** 1,500 items, for paging and virtual-scrolling checks. */
+function bigFeed(origin) {
+  const now = Date.now();
+  const items = Array.from(
+    { length: 1500 },
+    (_, i) =>
+      `<item><title>Big item ${i + 1}</title><guid>big-${i + 1}</guid><link>${origin}/big/${i + 1}</link>` +
+      `<pubDate>${new Date(now - i * 600 * 1000).toUTCString()}</pubDate><description>Item number ${i + 1}.</description></item>`,
+  );
+  return (
+    `<?xml version="1.0"?><rss version="2.0"><channel><title>Big Feed</title><link>${origin}/</link>` +
+    `<description>x</description>${items.join("")}</channel></rss>`
+  );
+}
+
+function serveFixtures() {
+  const origin = fixturesOrigin();
+  const send = (res, status, type, body) => {
+    res.writeHead(status, { "content-type": type });
+    res.end(body);
+  };
+  http
+    .createServer((req, res) => {
+      const url = new URL(req.url, origin);
+      if (url.pathname === "/health") return send(res, 200, "text/plain", "ok");
+      if (url.pathname === "/blog/" || url.pathname === "/blog") {
+        return send(
+          res,
+          200,
+          "text/html; charset=utf-8",
+          `<!doctype html><html><head><title>Local Test Blog</title>` +
+            `<link rel="alternate" type="application/rss+xml" title="Local Test Blog" href="/blog/feed.xml">` +
+            `<link rel="icon" href="/blog/icon.png"></head><body><h1>Local Test Blog</h1></body></html>`,
+        );
+      }
+      if (url.pathname === "/blog/feed.xml")
+        return send(res, 200, "application/rss+xml", blogFeed(origin));
+      if (url.pathname === "/blog/icon.png")
+        return send(res, 200, "image/png", fs.readFileSync(SITE_ICON));
+      if (url.pathname === "/podcast.xml")
+        return send(res, 200, "application/rss+xml", podcastFeed(origin));
+      if (url.pathname === "/big.xml")
+        return send(res, 200, "application/rss+xml", bigFeed(origin));
+      if (url.pathname.startsWith("/feeds/")) {
+        const name = path.basename(url.pathname);
+        const file = path.join(FEED_FIXTURES, name);
+        if (fs.existsSync(file)) {
+          const type = name.endsWith(".json") ? "application/feed+json" : "application/xml";
+          return send(res, 200, type, fs.readFileSync(file));
+        }
+      }
+      send(res, 404, "text/plain", "not found");
+    })
+    .listen(FIXTURES_PORT, "127.0.0.1");
 }
 
 // ---------------------------------------------------------------- WebKit inspector session
@@ -380,6 +511,32 @@ const COMMANDS = {
     console.log(stillUp ? "WARNING: app still running" : `stopped (${wins.length} window(s))`);
   },
 
+  /** Starts (in the background) a local site to subscribe to without the internet. */
+  async fixtures(args) {
+    if (args[0] === "stop") return stopFixtures();
+    if (await fixturesUp()) return console.log(`fixtures already running: ${fixturesOrigin()}`);
+    fs.mkdirSync(DIR, { recursive: true });
+    const child = spawn(process.execPath, [import.meta.filename, "__serve-fixtures"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    fs.writeFileSync(FIXTURES_PID, String(child.pid));
+    for (let i = 0; i < 40 && !(await fixturesUp()); i++) await sleep(100);
+    if (!(await fixturesUp())) fail("fixtures server did not start");
+    const origin = fixturesOrigin();
+    console.log(`fixtures: ${origin}
+  ${origin}/blog/           a site whose <link rel="alternate"> points at its feed (discovery)
+  ${origin}/blog/feed.xml   that feed: 12 posts dated from now back, favicon at /blog/icon.png
+  ${origin}/podcast.xml     a podcast feed with enclosures
+  ${origin}/big.xml         1,500 items (paging, virtual scrolling)
+  ${origin}/feeds/<name>    the parser fixtures (src-tauri/src/tests/fixtures/feeds)`);
+  },
+
+  async "__serve-fixtures"() {
+    serveFixtures();
+  },
+
   help() {
     console.log(`usage: node .claude/skills/run-omarss/driver.mjs <command> [args]
 
@@ -394,7 +551,8 @@ const COMMANDS = {
   invoke <command> [json]                 call a backend command over IPC, print {ok} or {error}
   db <sql>                                read-only query against the app's SQLite database
   log [n]                                 last n lines of the app's stdout/stderr (default 30)
-  quit                                    stop the app`);
+  quit                                    stop the app
+  fixtures [stop]                         serve a local blog + feeds on :${FIXTURES_PORT} for testing`);
   },
 };
 
