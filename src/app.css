@@ -1,0 +1,140 @@
+/*
+ * Theme tokens (SPEC §6.8). Every colour is a custom property so users can override them
+ * with a custom CSS file later. Built-in themes aim for WCAG AA contrast (SPEC §12).
+ */
+
+:root {
+  --font-ui:
+    system-ui, -apple-system, "Segoe UI", Roboto, Cantarell, "Noto Sans", "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "Cascadia Code", "JetBrains Mono", "DejaVu Sans Mono", Consolas, monospace;
+  --radius: 6px;
+  --reader-width: 42rem;
+  --reader-font-size: 1.0625rem;
+  --reader-line-height: 1.65;
+
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-sidebar: #f4f5f7;
+  --bg-list: #fafbfc;
+  --bg-input: #ffffff;
+  --bg-hover: rgb(0 0 0 / 0.045);
+  --bg-selected: #e2ebfc;
+  --bg-code: #f2f3f5;
+  --text: #1b1d21;
+  --text-read: #3f444c;
+  --text-muted: #5d636d;
+  --border: #e1e3e7;
+  --border-subtle: #eceef1;
+  --accent: #2f6fde;
+  --accent-text: #1f5bc4;
+  --focus-ring: #2f6fde;
+  --warning: #a35400;
+  --danger: #c0262d;
+  --star: #c98a00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #17181b;
+    --bg-sidebar: #1d1f23;
+    --bg-list: #1a1c1f;
+    --bg-input: #23262b;
+    --bg-hover: rgb(255 255 255 / 0.05);
+    --bg-selected: #233553;
+    --bg-code: #22252a;
+    --text: #e7e8eb;
+    --text-read: #b9bdc5;
+    --text-muted: #9ba1ab;
+    --border: #2d3036;
+    --border-subtle: #25282d;
+    --accent: #6d9eff;
+    --accent-text: #8fb4ff;
+    --focus-ring: #8fb4ff;
+    --warning: #f0a04b;
+    --danger: #ff7b80;
+    --star: #f2c14e;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #17181b;
+  --bg-sidebar: #1d1f23;
+  --bg-list: #1a1c1f;
+  --bg-input: #23262b;
+  --bg-hover: rgb(255 255 255 / 0.05);
+  --bg-selected: #233553;
+  --bg-code: #22252a;
+  --text: #e7e8eb;
+  --text-read: #b9bdc5;
+  --text-muted: #9ba1ab;
+  --border: #2d3036;
+  --border-subtle: #25282d;
+  --accent: #6d9eff;
+  --accent-text: #8fb4ff;
+  --focus-ring: #8fb4ff;
+  --warning: #f0a04b;
+  --danger: #ff7b80;
+  --star: #f2c14e;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
