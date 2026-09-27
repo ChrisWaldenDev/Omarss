@@ -33,16 +33,21 @@ jobs:
 
       # Milestone PRs are large (100+ files, 10k+ lines): a single `gh pr diff` gets truncated,
       # so the reviewer needs read-only access to the checked-out code and file-by-file diffs.
+      # The code-review plugin works through subagents (Agent, called Task in older Claude Code)
+      # and pipes long output through head/wc/grep, so those are allowed too (all read-only).
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Set the repository variable CLAUDE_REVIEW_DEBUG=true to print the whole session in
+          # the job log when a review misbehaves. Logs are public; turn it off again afterwards.
+          show_full_output: ${{ vars.CLAUDE_REVIEW_DEBUG == 'true' }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           claude_args: >-
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(git diff:*),Bash(git show:*),Bash(git log:*)"
+            --allowedTools "Agent,Task,mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(git diff:*),Bash(git show:*),Bash(git log:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(grep:*),Bash(sort:*),Bash(uniq:*),Bash(cut:*),Bash(jq:*)"
             --append-system-prompt "Large pull requests: this repository merges whole milestones at once,
             so a PR can change 100+ files and 10,000+ lines, and a single gh pr diff output is truncated
             at that size. Do not rely on it. Instead list the changed files with gh pr diff NUMBER
