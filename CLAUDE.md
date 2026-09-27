@@ -20,6 +20,7 @@
 - Repo: https://github.com/ChrisWaldenDev/omarss. `main` is protected: changes reach it only through a pull request.
 - Never commit to `main`. Start each piece of work on a new branch from an up-to-date `main` (e.g. `m2-local-feeds`, `fix/<short-name>`), push it, and open a PR with `gh pr create`.
 - Don't merge PRs unless the owner asks. CI (`.github/workflows/ci.yml`) runs on every PR.
+- Every merge to `main` publishes a GitHub Release with Linux and Windows installers (`.github/workflows/release.yml`), so anything merged ships.
 
 ## Status
 Completed: **M1 (Skeleton)**. Next: **M2 (Local feeds core)**. Update this line when a milestone is completed.
