@@ -2,6 +2,8 @@
 
 pub mod articles;
 pub mod feeds;
+pub mod opml;
 pub mod refresh;
 pub mod settings;
+pub mod storage;
 pub mod system;

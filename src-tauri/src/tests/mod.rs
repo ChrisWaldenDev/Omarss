@@ -4,5 +4,6 @@
 mod fixtures;
 mod library;
 mod parsing;
+mod polish;
 mod refresh;
 mod scheduler;
