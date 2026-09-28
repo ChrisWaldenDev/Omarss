@@ -1,5 +1,5 @@
-//! The `omarss-img://` protocol (SPEC §8.4). For now it serves cached favicons
-//! (`icon/<file>`); proxied article images come later.
+//! The `omarss-img://` protocol (SPEC §8.4): cached favicons (`icon/<file>`) and proxied
+//! article images (`img/<base64url(url)>`), so the WebView never contacts image hosts itself.
 
 use std::path::Path;
 
@@ -7,6 +7,7 @@ use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{Manager, Runtime, UriSchemeContext, UriSchemeResponder};
 
 use crate::services::feeds::FeedService;
+use crate::services::images::{decode_proxy_path, ImageCache};
 
 pub const SCHEME: &str = "omarss-img";
 
@@ -15,11 +16,27 @@ pub fn handle<R: Runtime>(
     request: Request<Vec<u8>>,
     responder: UriSchemeResponder,
 ) {
-    let icons_dir = ctx
-        .app_handle()
+    let app = ctx.app_handle();
+    let path = percent_decode(request.uri().path());
+    if let Some(encoded) = path.trim_start_matches('/').strip_prefix("img/") {
+        let url = decode_proxy_path(encoded);
+        let cache = app.try_state::<ImageCache>().map(|c| c.inner().clone());
+        tauri::async_runtime::spawn(async move {
+            let image = match (url, cache) {
+                (Some(url), Some(cache)) => cache.load(&url).await,
+                _ => None,
+            };
+            let response = match image {
+                Some(image) => image_response(&image.content_type, image.bytes),
+                None => not_found(),
+            };
+            responder.respond(response);
+        });
+        return;
+    }
+    let icons_dir = app
         .try_state::<FeedService>()
         .map(|feeds| feeds.icons_dir().to_path_buf());
-    let path = percent_decode(request.uri().path());
     tauri::async_runtime::spawn_blocking(move || {
         let response = match icons_dir {
             Some(dir) => serve(&dir, &path),
@@ -27,6 +44,21 @@ pub fn handle<R: Runtime>(
         };
         responder.respond(response);
     });
+}
+
+fn image_response(content_type: &str, bytes: Vec<u8>) -> Response<Vec<u8>> {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CACHE_CONTROL, "max-age=604800")
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+        // Even opened directly, a proxied file (e.g. an SVG) can't run scripts.
+        .header(
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'none'; style-src 'unsafe-inline'",
+        )
+        .body(bytes)
+        .unwrap_or_else(|_| not_found())
 }
 
 fn serve(icons_dir: &Path, path: &str) -> Response<Vec<u8>> {
