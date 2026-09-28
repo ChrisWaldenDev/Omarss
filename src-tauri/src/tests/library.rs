@@ -25,6 +25,7 @@ fn article(guid: &str, published_at: i64, body: &str) -> NewArticle {
         updated_at: None,
         content_hash: crate::content::content_hash(guid, Some(body), None),
         enclosures: Vec::new(),
+        thumbnail_url: None,
     }
 }
 
@@ -471,6 +472,8 @@ async fn editing_a_feed() {
         .update(
             id,
             FeedUpdate {
+                url: "https://a.example/feed".into(),
+                user_agent: None,
                 custom_title: Some("  My name  ".into()),
                 folder_id: Some(folder),
                 fetch_interval: Some(3600),
@@ -495,6 +498,8 @@ async fn editing_a_feed() {
         .update(
             id,
             FeedUpdate {
+                url: "https://a.example/feed".into(),
+                user_agent: Some("  ".into()),
                 custom_title: None,
                 folder_id: None,
                 fetch_interval: Some(0),
@@ -514,6 +519,8 @@ async fn editing_a_feed() {
     );
 
     let too_fast = FeedUpdate {
+        url: "https://a.example/feed".into(),
+        user_agent: None,
         custom_title: None,
         folder_id: None,
         fetch_interval: Some(60),
@@ -524,6 +531,8 @@ async fn editing_a_feed() {
         ErrorKind::InvalidInput
     );
     let bad_folder = FeedUpdate {
+        url: "https://a.example/feed".into(),
+        user_agent: None,
         custom_title: None,
         folder_id: Some(999),
         fetch_interval: None,
@@ -532,5 +541,79 @@ async fn editing_a_feed() {
     assert_eq!(
         app.feeds.update(id, bad_folder).await.unwrap_err().kind,
         ErrorKind::InvalidInput
+    );
+}
+
+#[tokio::test]
+async fn editing_the_address_resets_errors_and_fetches_again() {
+    let app = TestApp::new();
+    let now = clock::now_unix();
+    let id = seed(&app, "https://a.example/feed", None, 1, now).await;
+    let other = seed(&app, "https://b.example/feed", None, 1, now).await;
+    app.store
+        .run(move |conn| {
+            feeds::record_success(
+                conn,
+                id,
+                &feeds::FetchSuccess {
+                    new_url: None,
+                    etag: Some("\"v1\""),
+                    last_modified: None,
+                    title: None,
+                    site_url: None,
+                    description: None,
+                    fetched_at: now,
+                    next_fetch_at: Some(now + 3600),
+                },
+            )?;
+            feeds::record_error(conn, id, "HTTP 404", now, Some(now + 7200), false)
+        })
+        .await
+        .unwrap();
+
+    let update = |url: &str, user_agent: Option<&str>| FeedUpdate {
+        url: url.into(),
+        user_agent: user_agent.map(Into::into),
+        custom_title: None,
+        folder_id: None,
+        fetch_interval: None,
+        paused: false,
+    };
+    let details = app
+        .feeds
+        .update(id, update(" example.org/new-feed ", Some(" Mozilla/5.0 ")))
+        .await
+        .unwrap();
+    assert_eq!(details.url, "https://example.org/new-feed");
+    assert_eq!(details.user_agent.as_deref(), Some("Mozilla/5.0"));
+    assert_eq!((details.error_count, details.last_error), (0, None));
+    let record = app.feeds.record(id).await.unwrap();
+    assert_eq!(record.etag, None, "validators belong to the old address");
+    assert!(
+        record.next_fetch_at.unwrap() <= clock::now_unix(),
+        "fetched again now"
+    );
+
+    let taken = app
+        .feeds
+        .update(id, update("https://b.example/feed", None))
+        .await
+        .unwrap_err();
+    assert_eq!(taken.kind, ErrorKind::Conflict);
+    let bad = app
+        .feeds
+        .update(id, update("ftp://nope", None))
+        .await
+        .unwrap_err();
+    assert_eq!(bad.kind, ErrorKind::InvalidInput);
+    let bad_agent = app
+        .feeds
+        .update(id, update("https://example.org/new-feed", Some("a\nb")))
+        .await
+        .unwrap_err();
+    assert_eq!(bad_agent.kind, ErrorKind::InvalidInput);
+    assert_eq!(
+        app.feeds.record(other).await.unwrap().url,
+        "https://b.example/feed"
     );
 }
