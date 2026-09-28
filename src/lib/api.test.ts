@@ -4,6 +4,7 @@ const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 import { api, ApiError } from "./api";
+import { defaultSettings } from "./testing/settings";
 
 describe("api", () => {
   beforeEach(() => {
@@ -11,12 +12,7 @@ describe("api", () => {
   });
 
   it("calls the generated command and returns its data", async () => {
-    const settings = {
-      theme: "dark",
-      refreshIntervalMinutes: 30,
-      refreshOnStartup: true,
-      markUpdatedUnread: false,
-    } as const;
+    const settings = defaultSettings({ theme: "dark" });
     invoke.mockResolvedValue(settings);
     await expect(api.updateSettings(settings)).resolves.toEqual(settings);
     expect(invoke).toHaveBeenCalledWith("update_settings", { settings });

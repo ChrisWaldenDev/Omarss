@@ -41,7 +41,8 @@ export function fileSize(bytes: number, locale?: string): string {
   return new Intl.NumberFormat(locale, {
     style: "unit",
     unit: units[unit],
-    unitDisplay: "short",
+    // Short "byte" reads oddly ("0 byte"); spell bytes out.
+    unitDisplay: unit === 0 ? "long" : "short",
     maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0,
   }).format(value);
 }

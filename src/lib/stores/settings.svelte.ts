@@ -1,5 +1,7 @@
-import { api } from "../api";
+import { api, errorMessage } from "../api";
+import { t } from "../i18n";
 import type { Settings } from "../types";
+import { toasts } from "./toasts.svelte";
 
 export class SettingsStore {
   current = $state<Settings | null>(null);
@@ -19,6 +21,17 @@ export class SettingsStore {
     } catch (error) {
       if (this.current === next) this.current = previous;
       throw error;
+    }
+  }
+
+  /** `update` for settings controls: a failure is reported as a toast. */
+  async save(patch: Partial<Settings>): Promise<boolean> {
+    try {
+      await this.update(patch);
+      return true;
+    } catch (error) {
+      toasts.show(t("settings.saveError", { message: errorMessage(error) }));
+      return false;
     }
   }
 }

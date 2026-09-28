@@ -10,12 +10,15 @@
     children,
     footer,
     wide = false,
+    large = false,
   }: {
     title: string;
     onclose: () => void;
     children: Snippet;
     footer?: Snippet;
     wide?: boolean;
+    /** Nearly full-window, for settings. */
+    large?: boolean;
   } = $props();
 
   let dialog = $state<HTMLDialogElement>();
@@ -36,6 +39,7 @@
 <dialog
   bind:this={dialog}
   class:wide
+  class:large
   aria-labelledby={id}
   onclose={() => {
     if (!unmounting) onclose();
@@ -69,6 +73,22 @@
 
   dialog.wide {
     width: min(38rem, calc(100vw - 32px));
+  }
+
+  dialog.large {
+    width: min(56rem, calc(100vw - 32px));
+    height: min(40rem, calc(100vh - 64px));
+  }
+
+  dialog.large[open] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  dialog.large .body {
+    flex: 1;
+    min-height: 0;
+    padding: 0;
   }
 
   dialog::backdrop {
