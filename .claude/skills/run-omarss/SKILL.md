@@ -140,8 +140,15 @@ IPC.
   or `new DragEvent('dragstart' | 'dragover' | 'drop', {bubbles: true, cancelable: true,
   dataTransfer: new DataTransfer()})` on the sidebar rows. Read the DOM after a short wait:
   Svelte renders the menu on the next tick.
-- **Remote images in articles don't load yet.** The CSP only allows `omarss-img:` images, and
-  the image proxy arrives in M3. The reader hides blocked images.
+- **Remote images load through the image proxy** (`omarss-img://localhost/img/<base64url>`),
+  cached in `/tmp/omarss-driver/data/omarss/images/`. The fixtures have no article images;
+  `/blog/icon.png` works as a test image. Images that fail to load are hidden.
+- **The OPML file pickers use the desktop portal**, so they open on your visible workspace, not
+  the hidden one. Close them with `hyprctl dispatch 'hl.dsp.window.close({ window = "address:<addr>" })'`
+  (find the address with `hyprctl clients -j`); cancelling returns `null`. The file I/O around
+  them is covered by `cargo test tests::polish`.
+- **Keyboard shortcuts** can be driven with synthetic events:
+  `document.body.dispatchEvent(new KeyboardEvent('keydown', {key: 'j', bubbles: true, cancelable: true}))`.
 - **The article list defaults to unread-only.** A feed with 0 unread shows "You're all caught
   up", and `click "button.row"` gives `NOT_FOUND`. Run `click-text "All"` first.
   (`click-text "All"` hits the filter button, not "All articles": exact matches win.)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0: M3 Daily-driver polish (unreleased)
+
+- **Keyboard shortcuts.** Every §6.7 shortcut except `t`, `f` and `/` (tags, full text and search arrive in M4/M5): `j`/`k`, `n`/`p`, `J`/`K`, `o`/`Enter`, `v`, `m`, `s`, `A`, `r`/`R`, `g a`/`g u`/`g s`, `Space`/`Shift+Space`, `Ctrl+,`, `?` and `Esc`. `?` shows a cheatsheet, and every shortcut can be rebound in Settings → Keyboard (with clash detection). Shortcuts are off while typing.
+- **Mark all as read** for the current view, optionally only articles older than a day or a week, from the list header or `Shift+A`, with a 10-second **Undo**.
+- **OPML import and export.** Nested outlines become folders (deeper levels are flattened as `Parent / Child`), duplicates and invalid addresses are skipped and counted, and custom titles round-trip. Imported feeds are fetched straight away with the usual refresh progress.
+- **Retention.** Articles older than 90 days (configurable: 30/90/180/365 days or forever) are deleted daily and after refreshes that bring new articles. Starred and tagged articles and each feed's newest 50 are always kept. The planner is tuned with `PRAGMA optimize`, and the database is compacted weekly when idle.
+- **Image proxy and cache.** Remote images load through `omarss-img://` without cookies or referrer, are cached on disk (500 MB by default, least recently used evicted first) for offline reading, and known trackers are refused. "Load remote images" can be Always (with list thumbnails), Only in opened articles, or Never (click to load).
+- **List thumbnails** from Media RSS or an article's first image.
+- **Sanitisation hardening.** YouTube and Vimeo embeds become click-to-load players (`youtube-nocookie.com`). 1×1 tracking pixels and a built-in list of tracker hosts are removed, and `utm_*` parameters are stripped from links (setting, on by default).
+- **Broken feeds** view listing feeds that keep failing, with their last error, **Try again** and **Edit address**. Feed addresses are now editable, and feeds can override the User-Agent (advanced).
+- **Settings** (General, Reading, Refresh, Appearance, Keyboard, Privacy & network, Storage, About): two-pane layout, mark-as-read on open / after a delay / on scroll, reader font, size, line width and spacing, accent colour, interface scale (80–150 %), `custom.css`, manual HTTP/SOCKS5 proxy, pause refresh on metered connections (Windows), storage usage with "Clear image cache" and "Compact database". Sidebar and list widths can be dragged and are remembered.
+- Share menu in the reader (copy link, copy as Markdown, email), and right-click menus on articles.
+
 ## 0.2.0: M2 Local feeds (unreleased)
 
 - **Subscribe to real feeds.** Paste a feed or website address: Omarss discovers the site's feeds (`<link rel="alternate">`, then common paths), lets you pick one if there are several, and previews the title and latest five articles before you choose a name and folder.
