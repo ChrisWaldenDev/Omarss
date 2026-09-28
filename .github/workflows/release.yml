@@ -4,9 +4,12 @@ name: Release
 # once CI has passed on that commit. (main only changes through PRs, so "push to main" means
 # "a PR was merged".) Pull requests that touch packaging run the same builds without publishing.
 #
-# Version: <major>.<minor> from src-tauri/tauri.conf.json, then the number of commits on main,
-# e.g. 0.1.42 (tag v0.1.42). Purely numeric, so it's valid for semver, .deb, .rpm and .msi, and
-# it always increases because main can't be force-pushed. See docs/DECISIONS.md.
+# Version: <major>.<minor> from src-tauri/tauri.conf.json, then the number of commits on main
+# since the "v<major>.<minor>" marker tag (e.g. tag v0.2 at the commit that bumped to 0.2.0),
+# e.g. 0.2.7 (tag v0.2.7). Purely numeric, so it's valid for semver, .deb, .rpm and .msi, and
+# it always increases because main can't be force-pushed. Resets per minor version instead of
+# growing across the whole project's history. If the marker tag is missing, falls back to
+# counting all commits on main (old behaviour) and warns. See docs/DECISIONS.md.
 
 on:
   workflow_run:
@@ -59,7 +62,15 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           base=$(jq -r .version src-tauri/tauri.conf.json)
-          version="${base%.*}.$(git rev-list --count HEAD)"
+          major_minor="${base%.*}"
+          marker="v$major_minor"
+          if git rev-parse -q --verify "refs/tags/$marker" >/dev/null; then
+            patch=$(git rev-list --count "$marker..HEAD")
+          else
+            echo "::warning::marker tag $marker not found; falling back to total commit count. Create it at the commit that bumped to $major_minor.0."
+            patch=$(git rev-list --count HEAD)
+          fi
+          version="$major_minor.$patch"
           tag="v$version"
           build=true
           publish=false
