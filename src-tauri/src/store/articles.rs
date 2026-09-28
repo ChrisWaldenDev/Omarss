@@ -18,6 +18,7 @@ pub struct NewArticle {
     pub updated_at: Option<i64>,
     pub content_hash: String,
     pub enclosures: Vec<Enclosure>,
+    pub thumbnail_url: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -50,14 +51,15 @@ pub fn upsert(
     )?;
     let mut insert = tx.prepare_cached(
         "INSERT INTO articles (feed_id, guid, url, title, author, summary_html, content_html,
-                               published_at, updated_at, fetched_at, content_hash)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                               published_at, updated_at, fetched_at, content_hash, thumbnail_url)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
     )?;
     let mut update = tx.prepare_cached(
         "UPDATE articles SET url = ?2, title = ?3, author = ?4, summary_html = ?5,
                 content_html = ?6, updated_at = ?7, content_hash = ?8,
                 is_read = CASE WHEN ?9 THEN 0 ELSE is_read END,
-                read_at = CASE WHEN ?9 THEN NULL ELSE read_at END
+                read_at = CASE WHEN ?9 THEN NULL ELSE read_at END,
+                thumbnail_url = ?10
          WHERE id = ?1",
     )?;
     let mut update_metadata = tx.prepare_cached(
@@ -88,7 +90,8 @@ pub fn upsert(
                     item.published_at,
                     item.updated_at,
                     now,
-                    item.content_hash
+                    item.content_hash,
+                    item.thumbnail_url
                 ])?;
                 stats.inserted += 1;
                 tx.last_insert_rowid()
@@ -124,7 +127,8 @@ pub fn upsert(
                     item.content_html,
                     item.updated_at,
                     item.content_hash,
-                    mark_updated_unread
+                    mark_updated_unread,
+                    item.thumbnail_url
                 ])?;
                 stats.updated += 1;
                 id
@@ -194,6 +198,7 @@ pub struct ListRow {
     pub published_at: i64,
     pub is_read: bool,
     pub is_starred: bool,
+    pub thumbnail_url: Option<String>,
 }
 
 /// One page of a view, ordered by `(published_at, id)` with keyset pagination.
@@ -206,28 +211,12 @@ pub fn list(
     let mut sql = String::from(
         "SELECT a.id, a.feed_id, coalesce(nullif(f.custom_title, ''), f.title), a.title,
                 substr(coalesce(nullif(a.summary_html, ''), a.content_html, ''), 1, 3000),
-                coalesce(a.published_at, a.fetched_at), a.is_read, a.is_starred
+                coalesce(a.published_at, a.fetched_at), a.is_read, a.is_starred, a.thumbnail_url
          FROM articles a JOIN feeds f ON f.id = a.feed_id
          WHERE a.hidden = 0",
     );
     let mut args: Vec<Value> = Vec::new();
-    match filter.view {
-        View::All => {}
-        View::Unread => sql.push_str(" AND a.is_read = 0"),
-        View::Starred => sql.push_str(" AND a.is_starred = 1"),
-        View::Today => {
-            sql.push_str(" AND a.published_at >= ?");
-            args.push(filter.today_start.into());
-        }
-        View::Feed { id } => {
-            sql.push_str(" AND a.feed_id = ?");
-            args.push((*id).into());
-        }
-        View::Folder { id } => {
-            sql.push_str(" AND a.feed_id IN (SELECT id FROM feeds WHERE folder_id = ?)");
-            args.push((*id).into());
-        }
-    }
+    push_view_condition(filter.view, filter.today_start, &mut sql, &mut args);
     // The Starred view lists every starred article; the Unread view is unread by definition.
     if filter.unread_only && !matches!(filter.view, View::Starred | View::Unread) {
         sql.push_str(" AND a.is_read = 0");
@@ -258,10 +247,72 @@ pub fn list(
                 published_at: row.get(5)?,
                 is_read: row.get(6)?,
                 is_starred: row.get(7)?,
+                thumbnail_url: row.get(8)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+/// Narrows a query on `articles a` to one view.
+fn push_view_condition(view: &View, today_start: i64, sql: &mut String, args: &mut Vec<Value>) {
+    match view {
+        View::All => {}
+        View::Unread => sql.push_str(" AND a.is_read = 0"),
+        View::Starred => sql.push_str(" AND a.is_starred = 1"),
+        View::Today => {
+            sql.push_str(" AND a.published_at >= ?");
+            args.push(today_start.into());
+        }
+        View::Feed { id } => {
+            sql.push_str(" AND a.feed_id = ?");
+            args.push((*id).into());
+        }
+        View::Folder { id } => {
+            sql.push_str(" AND a.feed_id IN (SELECT id FROM feeds WHERE folder_id = ?)");
+            args.push((*id).into());
+        }
+    }
+}
+
+/// Unread articles in a view, optionally only those published before `before` (for "Mark
+/// all as read", SPEC §6.2).
+pub fn unread_ids(
+    conn: &Connection,
+    view: &View,
+    today_start: i64,
+    before: Option<i64>,
+) -> AppResult<Vec<i64>> {
+    let mut sql = String::from("SELECT a.id FROM articles a WHERE a.hidden = 0 AND a.is_read = 0");
+    let mut args: Vec<Value> = Vec::new();
+    push_view_condition(view, today_start, &mut sql, &mut args);
+    if let Some(before) = before {
+        sql.push_str(" AND a.published_at < ?");
+        args.push(before.into());
+    }
+    let mut stmt = conn.prepare(&sql)?;
+    let ids = stmt
+        .query_map(params_from_iter(args), |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ids)
+}
+
+/// Retention cleanup (SPEC §6.9): deletes articles published before `cutoff`, except starred
+/// or tagged ones and the newest `keep_per_feed` of every feed. Returns how many were deleted.
+pub fn delete_expired(conn: &Connection, cutoff: i64, keep_per_feed: u32) -> AppResult<usize> {
+    Ok(conn.execute(
+        "DELETE FROM articles WHERE id IN (
+             SELECT r.id FROM (
+                 SELECT id, is_starred, coalesce(published_at, fetched_at) AS at,
+                        row_number() OVER (PARTITION BY feed_id
+                                           ORDER BY published_at DESC, id DESC) AS position
+                 FROM articles
+             ) r
+             WHERE r.position > ?2 AND r.is_starred = 0 AND r.at < ?1
+               AND NOT EXISTS (SELECT 1 FROM article_tags t WHERE t.article_id = r.id)
+         )",
+        params![cutoff, keep_per_feed],
+    )?)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -309,18 +360,24 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<ArticleRow> {
     Ok(article)
 }
 
+/// Most ids bound in one statement (SQLite's limit on parameters is 32766).
+const IDS_PER_STATEMENT: usize = 500;
+
+/// Marks articles read or unread; returns how many changed. Callers wanting all-or-nothing for
+/// long lists pass a transaction.
 pub fn set_read(conn: &Connection, ids: &[i64], read: bool, now: i64) -> AppResult<usize> {
-    if ids.is_empty() {
-        return Ok(0);
+    let mut changed = 0;
+    for chunk in ids.chunks(IDS_PER_STATEMENT) {
+        let placeholders = vec!["?"; chunk.len()].join(", ");
+        let sql = format!(
+            "UPDATE articles SET is_read = ?1, read_at = CASE WHEN ?1 THEN ?2 ELSE NULL END
+             WHERE is_read != ?1 AND id IN ({placeholders})"
+        );
+        let mut args: Vec<Value> = vec![Value::from(read), Value::from(now)];
+        args.extend(chunk.iter().map(|id| Value::from(*id)));
+        changed += conn.execute(&sql, params_from_iter(args))?;
     }
-    let placeholders = vec!["?"; ids.len()].join(", ");
-    let sql = format!(
-        "UPDATE articles SET is_read = ?1, read_at = CASE WHEN ?1 THEN ?2 ELSE NULL END
-         WHERE is_read != ?1 AND id IN ({placeholders})"
-    );
-    let mut args: Vec<Value> = vec![Value::from(read), Value::from(now)];
-    args.extend(ids.iter().map(|id| Value::from(*id)));
-    Ok(conn.execute(&sql, params_from_iter(args))?)
+    Ok(changed)
 }
 
 pub fn set_starred(conn: &Connection, id: i64, starred: bool, now: i64) -> AppResult<()> {
@@ -350,4 +407,111 @@ pub fn counts(conn: &Connection, today_start: i64) -> AppResult<ViewCounts> {
             })
         },
     )?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::feeds::{self, NewFeed};
+    use crate::store::migrations::{migrate, MIGRATIONS};
+
+    const DAY: i64 = 86_400;
+
+    fn item(guid: String, published_at: i64) -> NewArticle {
+        NewArticle {
+            guid,
+            url: None,
+            title: "t".into(),
+            author: None,
+            summary_html: None,
+            content_html: None,
+            published_at,
+            updated_at: None,
+            content_hash: "h".into(),
+            enclosures: Vec::new(),
+            thumbnail_url: None,
+        }
+    }
+
+    /// A feed with `count` articles, one a day, the newest `now`. Returns (feed, ids newest first).
+    fn seed(conn: &mut Connection, url: &str, count: i64, newest: i64) -> (i64, Vec<i64>) {
+        let tx = conn.transaction().unwrap();
+        let feed = feeds::insert(
+            &tx,
+            &NewFeed {
+                url,
+                title: url,
+                custom_title: None,
+                site_url: None,
+                description: None,
+                folder_id: None,
+                now: newest,
+            },
+        )
+        .unwrap();
+        let items: Vec<NewArticle> = (0..count)
+            .map(|i| item(format!("{url}-{i}"), newest - i * DAY))
+            .collect();
+        upsert(&tx, feed, &items, newest, false).unwrap();
+        tx.commit().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id FROM articles WHERE feed_id = ?1 ORDER BY published_at DESC")
+            .unwrap();
+        let ids = stmt
+            .query_map([feed], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<i64>, _>>()
+            .unwrap();
+        (feed, ids)
+    }
+
+    fn remaining(conn: &Connection, feed: i64) -> Vec<i64> {
+        let mut stmt = conn
+            .prepare("SELECT id FROM articles WHERE feed_id = ?1 ORDER BY published_at DESC")
+            .unwrap();
+        stmt.query_map([feed], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<i64>, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn retention_keeps_starred_tagged_and_the_newest_fifty() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = Connection::open(dir.path().join("t.sqlite")).unwrap();
+        migrate(&mut conn, MIGRATIONS, dir.path()).unwrap();
+        let now = 100 * 365 * DAY;
+        let (busy, ids) = seed(&mut conn, "https://busy.example/feed", 60, now);
+        let (quiet, quiet_ids) = seed(&mut conn, "https://quiet.example/feed", 5, now - 200 * DAY);
+        set_starred(&conn, ids[55], true, now).unwrap();
+        conn.execute("INSERT INTO tags (id, name) VALUES (1, 'keep')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO article_tags (article_id, tag_id) VALUES (?1, 1)",
+            [ids[56]],
+        )
+        .unwrap();
+
+        // 30 days: articles 31–59 are expired, but 0–49 are the newest fifty.
+        let deleted = delete_expired(&conn, now - 30 * DAY, 50).unwrap();
+        assert_eq!(deleted, 8, "50–59 minus one starred and one tagged");
+        let mut expected: Vec<i64> = ids[..50].to_vec();
+        expected.extend([ids[55], ids[56]]);
+        assert_eq!(remaining(&conn, busy), expected);
+        assert_eq!(remaining(&conn, quiet), quiet_ids, "under fifty: all kept");
+
+        assert_eq!(delete_expired(&conn, now - 30 * DAY, 50).unwrap(), 0);
+    }
+
+    #[test]
+    fn set_read_handles_more_ids_than_sqlite_allows_in_one_statement() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = Connection::open(dir.path().join("t.sqlite")).unwrap();
+        migrate(&mut conn, MIGRATIONS, dir.path()).unwrap();
+        let (_, ids) = seed(&mut conn, "https://big.example/feed", 1_200, 1_000 * DAY);
+        let mut many = ids.clone();
+        many.extend(1_000_000..1_040_000);
+        assert_eq!(set_read(&conn, &many, true, 5).unwrap(), 1_200);
+        assert_eq!(set_read(&conn, &many, true, 5).unwrap(), 0);
+    }
 }

@@ -13,7 +13,9 @@ use tokio::task::JoinSet;
 use crate::clock;
 use crate::events::{ArticlesChanged, FeedError, RefreshDone, RefreshProgress};
 use crate::models::{RefreshStatus, RefreshTarget};
+use crate::network;
 use crate::services::feeds::FeedService;
+use crate::services::maintenance::MaintenanceService;
 use crate::services::settings::{Settings, SettingsService};
 
 pub const GLOBAL_CONCURRENCY: usize = 8;
@@ -26,6 +28,8 @@ pub const MAX_BACKOFF: i64 = 86_400;
 pub const OFFLINE_RETRY: i64 = 60;
 /// Longest the loop sleeps before re-checking for due feeds.
 const MAX_IDLE: i64 = 3_600;
+/// While automatic refresh is paused on a metered connection, re-check this often.
+const METERED_RECHECK: i64 = 300;
 
 /// The refresh interval for a feed: its override, else the global setting. `None` means
 /// manual refresh only (override `0`, or the global "manual only" setting).
@@ -77,6 +81,7 @@ impl Scheduler {
         app: AppHandle<R>,
         feeds: FeedService,
         settings: SettingsService,
+        maintenance: Option<MaintenanceService>,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
         let status = Arc::new(Mutex::new(RefreshStatus::default()));
@@ -84,7 +89,7 @@ impl Scheduler {
             tx,
             status: status.clone(),
         };
-        tauri::async_runtime::spawn(run(app, feeds, settings, rx, status));
+        tauri::async_runtime::spawn(run(app, feeds, settings, maintenance, rx, status));
         scheduler
     }
 
@@ -106,6 +111,7 @@ async fn run<R: Runtime>(
     app: AppHandle<R>,
     feeds: FeedService,
     settings: SettingsService,
+    maintenance: Option<MaintenanceService>,
     mut rx: mpsc::UnboundedReceiver<Message>,
     status: Arc<Mutex<RefreshStatus>>,
 ) {
@@ -118,8 +124,15 @@ async fn run<R: Runtime>(
             queued.extend(message);
         }
         let manual = !queued.is_empty();
+        // Automatic refresh waits while on a metered connection, if the user asked (SPEC §7.2).
+        // Manual refreshes always run.
+        let metered = !manual
+            && settings.get().await.is_ok_and(|s| s.pause_on_metered)
+            && network::is_metered();
         let jobs = if manual {
             feeds.jobs_for(&std::mem::take(&mut queued)).await
+        } else if metered {
+            Ok(Vec::new())
         } else {
             feeds.due(clock::now_unix()).await
         };
@@ -137,6 +150,7 @@ async fn run<R: Runtime>(
         if jobs.is_empty() {
             let now = clock::now_unix();
             let wait = match feeds.next_due_at().await {
+                _ if metered => METERED_RECHECK,
                 Ok(Some(at)) => (at - now).clamp(1, MAX_IDLE),
                 _ => MAX_IDLE,
             };
@@ -150,7 +164,13 @@ async fn run<R: Runtime>(
             continue;
         }
         let snapshot = settings.get().await.unwrap_or_default();
-        run_batch(&app, &feeds, &snapshot, &status, jobs).await;
+        let new_count = run_batch(&app, &feeds, &snapshot, &status, jobs).await;
+        // Retention runs after refreshes that brought new articles (SPEC §6.9).
+        if let Some(maintenance) = maintenance.as_ref().filter(|_| new_count > 0) {
+            if let Err(err) = maintenance.cleanup().await {
+                tracing::warn!(%err, "retention cleanup failed");
+            }
+        }
     }
 }
 
@@ -160,13 +180,14 @@ fn update_status(status: &Mutex<RefreshStatus>, f: impl FnOnce(&mut RefreshStatu
     }
 }
 
+/// Fetches `jobs` and reports progress; returns how many new articles arrived.
 pub(crate) async fn run_batch<R: Runtime>(
     app: &AppHandle<R>,
     feeds: &FeedService,
     settings: &Settings,
     status: &Mutex<RefreshStatus>,
     jobs: Vec<(i64, String)>,
-) {
+) -> u32 {
     let total = u32::try_from(jobs.len()).unwrap_or(u32::MAX);
     update_status(status, |s| {
         s.running = true;
@@ -271,6 +292,7 @@ pub(crate) async fn run_batch<R: Runtime>(
 
     let new_count = u32::try_from(new_count).unwrap_or(u32::MAX);
     finish(app, status, new_count, errors, offline, changed);
+    new_count
 }
 
 fn finish<R: Runtime>(
