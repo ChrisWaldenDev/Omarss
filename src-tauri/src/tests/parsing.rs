@@ -155,6 +155,32 @@ fn youtube_uses_the_media_description() {
 }
 
 #[test]
+fn thumbnails_come_from_media_rss_then_content() {
+    let youtube = load("youtube_atom.xml");
+    assert_eq!(
+        youtube.items[0].thumbnail_url.as_deref(),
+        Some("https://i.video.example/vi/abc123/hqdefault.jpg")
+    );
+    let photos = load("media_rss.xml");
+    assert_eq!(
+        item(&photos, "p1").thumbnail_url.as_deref(),
+        Some("https://photos.example/thumb/p1.jpg"),
+        "media:thumbnail wins over the full-size media:content"
+    );
+    assert_eq!(
+        item(&photos, "p2").thumbnail_url,
+        None,
+        "videos aren't thumbnails"
+    );
+    let letter = load("substack_rss.xml");
+    assert_eq!(
+        letter.items[0].thumbnail_url.as_deref(),
+        Some("https://letter.example/img/envelopes.jpeg"),
+        "first image in the content"
+    );
+}
+
+#[test]
 fn podcast_enclosures_and_ttl() {
     let feed = load("podcast_itunes.xml");
     assert_eq!(feed.update_hint_secs, Some(3600), "ttl 60 minutes");

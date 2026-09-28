@@ -8,8 +8,15 @@ use ammonia::UrlRelative;
 use sha2::{Digest, Sha256};
 use url::Url;
 
+mod rewrite;
+
+pub use rewrite::{
+    first_image, for_display, is_tracker, strip_tracking_params, DisplayOptions, ImageDisplay,
+};
+
 /// Tags kept in article HTML (SPEC §8.3). Everything else is removed; the contents of
-/// `script` and `style` are dropped entirely. Iframes (video embeds) are not allowed yet.
+/// `script` and `style` are dropped entirely. Iframes survive only as YouTube/Vimeo embeds,
+/// which then become click-to-load placeholders (SPEC §8.2).
 const ALLOWED_TAGS: &[&str] = &[
     "a",
     "abbr",
@@ -50,6 +57,7 @@ const ALLOWED_TAGS: &[&str] = &[
     "hgroup",
     "hr",
     "i",
+    "iframe",
     "img",
     "ins",
     "kbd",
@@ -111,11 +119,13 @@ const TAG_ATTRIBUTES: &[(&str, &[&str])] = &[
     ("ol", &["start", "reversed", "type"]),
     ("li", &["value"]),
     ("details", &["open"]),
+    ("iframe", &["src"]),
 ];
 
 /// Sanitises feed-provided HTML with a strict allowlist and resolves relative URLs against
 /// `base`. Links get `rel="noopener noreferrer"`; `javascript:` URLs, event handlers, `style`
-/// attributes and every tag outside the allowlist are removed.
+/// attributes and every tag outside the allowlist are removed. Video embeds become
+/// click-to-load placeholders and tracking pixels are dropped (SPEC §8.2, §8.4).
 pub fn sanitize_html(html: &str, base: Option<&Url>) -> String {
     let tag_attributes: HashMap<&str, HashSet<&str>> = TAG_ATTRIBUTES
         .iter()
@@ -139,7 +149,7 @@ pub fn sanitize_html(html: &str, base: Option<&Url>) -> String {
         Some(base) => builder.url_relative(UrlRelative::RewriteWithBase(base.clone())),
         None => builder.url_relative(UrlRelative::Deny),
     };
-    builder.clean(html).to_string()
+    rewrite::finish_sanitized(&builder.clean(html).to_string())
 }
 
 fn filter_attribute<'u>(
@@ -149,6 +159,7 @@ fn filter_attribute<'u>(
     base: Option<&Url>,
 ) -> Option<Cow<'u, str>> {
     match attribute {
+        "src" if element == "iframe" => rewrite::canonical_embed(value).map(Cow::Owned),
         "src" | "href" | "poster" => {
             let lowered = value.trim_start().to_ascii_lowercase();
             if lowered.starts_with("data:") {
@@ -580,6 +591,28 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn video_embeds_become_click_to_load_placeholders() {
+        let out = clean(
+            r#"<p>Watch:</p><iframe width="560" src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1" onload="alert(1)" allowfullscreen></iframe><iframe src="https://ads.example/frame"></iframe>"#,
+        );
+        assert_eq!(
+            out,
+            "<p>Watch:</p><figure class=\"omarss-embed\" data-embed=\"https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ\"><a href=\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" rel=\"noopener noreferrer\">YouTube video</a></figure>"
+        );
+    }
+
+    #[test]
+    fn tracking_pixels_are_dropped_at_ingest() {
+        let out = clean(
+            r#"<p>Hi</p><img src="https://feeds.feedburner.com/~r/x/~4/y" height="1" width="1" alt=""><img src="/photo.jpg" alt="Photo">"#,
+        );
+        assert_eq!(
+            out,
+            r#"<p>Hi</p><img src="https://blog.example/photo.jpg" alt="Photo">"#
+        );
     }
 
     #[test]
