@@ -2,7 +2,7 @@
 //! redirects, 410/429, discovery).
 
 use std::io::Cursor;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -12,6 +12,7 @@ use crate::clock;
 use crate::error::ErrorKind;
 use crate::models::{ArticleQuery, SortOrder, SubscribeRequest, View};
 use crate::services::settings::Settings;
+use crate::store::feeds::{self, NewFeed};
 
 fn rss(title: &str, items: &[(&str, &str)]) -> String {
     let items: String = items
@@ -581,4 +582,78 @@ async fn favicons_are_fetched_resized_and_stored() {
     );
     let stored = image::open(app.icons_dir().join(&icon)).unwrap();
     assert_eq!((stored.width(), stored.height()), (32, 32));
+}
+
+#[tokio::test]
+async fn refreshing_does_not_wait_for_the_favicon() {
+    let server = MockServer::start().await;
+    let body = format!(
+        "<rss version=\"2.0\"><channel><title>Slow icon</title><link>{0}/</link>\
+         <image><url>{0}/logo.png</url></image><item><title>t</title><guid>g</guid></item></channel></rss>",
+        server.uri()
+    );
+    mount(&server, "/feed.xml", feed_response(body)).await;
+    let logo = image::RgbaImage::from_pixel(16, 16, image::Rgba([10, 120, 200, 255]));
+    let mut png = Vec::new();
+    logo.write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let icon_delay = Duration::from_millis(1500);
+    mount(
+        &server,
+        "/logo.png",
+        ResponseTemplate::new(200)
+            .set_body_raw(png, "image/png")
+            .set_delay(icon_delay),
+    )
+    .await;
+
+    // Added straight to the database, so no icon fetch is already under way.
+    let app = TestApp::new();
+    let url = format!("{}/feed.xml", server.uri());
+    let id = app
+        .store
+        .run(move |conn| {
+            let tx = conn.transaction()?;
+            let id = feeds::insert(
+                &tx,
+                &NewFeed {
+                    url: &url,
+                    title: "t",
+                    custom_title: None,
+                    site_url: None,
+                    description: None,
+                    folder_id: None,
+                    now: 0,
+                },
+            )?;
+            tx.commit()?;
+            Ok(id)
+        })
+        .await
+        .unwrap();
+
+    let started = Instant::now();
+    let outcome = app
+        .feeds
+        .refresh_feed(id, &Settings::default())
+        .await
+        .unwrap();
+    assert!(outcome.error.is_none());
+    assert_eq!(outcome.new_articles, 1);
+    assert!(
+        started.elapsed() < icon_delay,
+        "the refresh returned without waiting for the icon ({:?})",
+        started.elapsed()
+    );
+    assert_eq!(app.feeds.record(id).await.unwrap().icon_path, None);
+
+    let mut icon = None;
+    for _ in 0..100 {
+        icon = app.feeds.record(id).await.unwrap().icon_path;
+        if icon.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(icon.is_some(), "the icon is still stored in the background");
 }

@@ -205,12 +205,7 @@ impl FeedService {
             })
             .await?;
 
-        let this = self.clone();
-        let (icon_url, site_url) = (parsed.icon_url, parsed.site_url);
-        tauri::async_runtime::spawn(async move {
-            this.refresh_icon(id, None, icon_url, site_url, feed_url)
-                .await;
-        });
+        self.spawn_icon_refresh(id, None, parsed.icon_url, parsed.site_url, feed_url);
         Ok(id)
     }
 
@@ -314,14 +309,7 @@ impl FeedService {
                     )
                 })
                 .await?;
-            self.refresh_icon(
-                id,
-                feed.icon_path.clone(),
-                None,
-                feed.site_url.clone(),
-                feed.url.clone(),
-            )
-            .await;
+            self.spawn_icon_refresh(id, feed.icon_path, None, feed.site_url, feed.url);
             return Ok(RefreshOutcome::default());
         }
         if !response.is_success() {
@@ -381,14 +369,13 @@ impl FeedService {
                 "updated article metadata"
             );
         }
-        self.refresh_icon(
+        self.spawn_icon_refresh(
             id,
-            feed.icon_path.clone(),
+            feed.icon_path,
             parsed.icon_url,
             parsed.site_url.or(feed.site_url),
-            feed.url.clone(),
-        )
-        .await;
+            feed.url,
+        );
         Ok(RefreshOutcome {
             new_articles: stats.inserted,
             updated_articles: stats.updated,
@@ -450,6 +437,23 @@ impl FeedService {
                 feeds::reschedule(conn, id, next)
             })
             .await
+    }
+
+    /// Runs [`Self::refresh_icon`] in the background, so a refresh (and the scheduler's
+    /// per-host and global permits it holds) never waits on favicon downloads.
+    fn spawn_icon_refresh(
+        &self,
+        id: i64,
+        current: Option<String>,
+        feed_icon: Option<String>,
+        site_url: Option<String>,
+        feed_url: String,
+    ) {
+        let this = self.clone();
+        tauri::async_runtime::spawn(async move {
+            this.refresh_icon(id, current, feed_icon, site_url, feed_url)
+                .await;
+        });
     }
 
     /// Fetches the favicon when there is none or it's a week old, at most once a day.
