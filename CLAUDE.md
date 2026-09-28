@@ -21,6 +21,7 @@
 - Never commit to `main`. Start each piece of work on a new branch from an up-to-date `main` (e.g. `m2-local-feeds`, `fix/<short-name>`), push it, and open a PR with `gh pr create`.
 - Don't merge PRs unless the owner asks. CI (`.github/workflows/ci.yml`) runs on every PR.
 - Every merge to `main` publishes a GitHub Release with Linux and Windows installers (`.github/workflows/release.yml`), so anything merged ships.
+- Release versions are `<major>.<minor>.<patch>`, tagged and published automatically on merge (no manual tagging). When a milestone bumps `<major>.<minor>` (e.g. 0.3 → 0.4), bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json` as part of that milestone's PR — that's the only manual step. The merge that lands the bump releases as `<major>.<minor>.0`; later merges increment the patch number on their own. Don't create a `v<major>.<minor>` git tag: that was the old (pre-0.3) manual marker step and would throw off the automatic count. See `docs/DECISIONS.md` for how the count works.
 
 ## Status
 Completed: **M1 (Skeleton)**, **M2 (Local feeds core)**. Next: **M3 (Daily-driver polish)**. Update this line when a milestone is completed.
