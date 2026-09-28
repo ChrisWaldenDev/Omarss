@@ -28,6 +28,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "0002_list_indexes",
         sql: include_str!("../../migrations/0002_list_indexes.sql"),
     },
+    Migration {
+        version: 3,
+        name: "0003_polish",
+        sql: include_str!("../../migrations/0003_polish.sql"),
+    },
 ];
 
 #[derive(Debug, Default, PartialEq, Eq)]

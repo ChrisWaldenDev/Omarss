@@ -1,6 +1,6 @@
 //! Repository for the `settings` table: raw key → JSON-text rows.
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::error::AppResult;
 
@@ -10,6 +10,14 @@ pub fn get_all(conn: &Connection) -> AppResult<Vec<(String, String)>> {
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<Result<_, _>>()?;
     Ok(rows)
+}
+
+pub fn get(conn: &Connection, key: &str) -> AppResult<Option<String>> {
+    Ok(conn
+        .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+            row.get(0)
+        })
+        .optional()?)
 }
 
 /// Upserts every `(key, json_value)` pair in a single transaction.

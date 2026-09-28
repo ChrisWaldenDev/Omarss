@@ -4,6 +4,7 @@
 pub mod discovery;
 pub mod favicon;
 
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 use reqwest::header::{self, HeaderMap};
@@ -15,6 +16,7 @@ use crate::error::{AppError, AppResult};
 pub const FEED_MAX_BYTES: usize = 10 * 1024 * 1024;
 pub const PAGE_MAX_BYTES: usize = 5 * 1024 * 1024;
 pub const ICON_MAX_BYTES: usize = 1024 * 1024;
+pub const IMAGE_MAX_BYTES: usize = 16 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
 
 pub const FEED_ACCEPT: &str = "application/rss+xml, application/atom+xml, application/feed+json, \
@@ -25,9 +27,12 @@ pub const IMAGE_ACCEPT: &str = "image/png, image/x-icon, image/*;q=0.9, */*;q=0.
 
 pub const PROJECT_URL: &str = "https://github.com/ChrisWaldenDev/omarss";
 
+/// Shared HTTP client. Clones share one underlying client, so changing the proxy applies
+/// everywhere at once.
 #[derive(Clone)]
 pub struct HttpClient {
-    client: reqwest::Client,
+    client: Arc<RwLock<reqwest::Client>>,
+    user_agent: Arc<str>,
 }
 
 pub struct Request<'a> {
@@ -36,6 +41,8 @@ pub struct Request<'a> {
     pub max_bytes: usize,
     pub etag: Option<&'a str>,
     pub last_modified: Option<&'a str>,
+    /// Replaces the default User-Agent (per-feed override, SPEC §7.1).
+    pub user_agent: Option<&'a str>,
 }
 
 impl<'a> Request<'a> {
@@ -46,6 +53,7 @@ impl<'a> Request<'a> {
             max_bytes,
             etag: None,
             last_modified: None,
+            user_agent: None,
         }
     }
 }
@@ -102,18 +110,33 @@ impl From<FetchError> for AppError {
 }
 
 impl HttpClient {
-    /// `version` goes into the User-Agent: `Omarss/<version> (+<project url>)`.
-    pub fn new(version: &str) -> AppResult<Self> {
+    /// `version` goes into the User-Agent: `Omarss/<version> (+<project url>)`. `proxy` is a
+    /// manual proxy URL; `None` (or empty) uses the system proxy settings (SPEC §7.1).
+    pub fn new(version: &str, proxy: Option<&str>) -> AppResult<Self> {
         // reqwest is built without a bundled crypto provider; use ring (no C toolchain quirks).
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let client = reqwest::Client::builder()
-            .user_agent(format!("Omarss/{version} (+{PROJECT_URL})"))
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|err| AppError::internal(format!("Could not set up HTTP: {err}")))?;
-        Ok(Self { client })
+        let user_agent: Arc<str> = format!("Omarss/{version} (+{PROJECT_URL})").into();
+        let client = build_client(&user_agent, proxy)?;
+        Ok(Self {
+            client: Arc::new(RwLock::new(client)),
+            user_agent,
+        })
+    }
+
+    /// Switches to a manual proxy, or back to the system proxy with `None`.
+    pub fn set_proxy(&self, proxy: Option<&str>) -> AppResult<()> {
+        let client = build_client(&self.user_agent, proxy)?;
+        if let Ok(mut current) = self.client.write() {
+            *current = client;
+        }
+        Ok(())
+    }
+
+    fn client(&self) -> reqwest::Client {
+        match self.client.read() {
+            Ok(client) => client.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     pub async fn get(&self, request: Request<'_>) -> Result<Response, FetchError> {
@@ -125,14 +148,17 @@ impl HttpClient {
             ));
         }
 
+        let client = self.client();
         let mut current = start.clone();
         let mut permanent = start;
         let mut still_permanent = true;
         for _ in 0..=MAX_REDIRECTS {
-            let mut builder = self
-                .client
+            let mut builder = client
                 .get(current.clone())
                 .header(header::ACCEPT, request.accept);
+            if let Some(agent) = request.user_agent {
+                builder = builder.header(header::USER_AGENT, agent);
+            }
             if let Some(etag) = request.etag {
                 builder = builder.header(header::IF_NONE_MATCH, etag);
             }
@@ -203,6 +229,22 @@ impl HttpClient {
             "Too many redirects (more than {MAX_REDIRECTS})"
         )))
     }
+}
+
+fn build_client(user_agent: &str, proxy: Option<&str>) -> AppResult<reqwest::Client> {
+    let mut builder = reqwest::Client::builder()
+        .user_agent(user_agent)
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none());
+    if let Some(proxy) = proxy.map(str::trim).filter(|p| !p.is_empty()) {
+        let proxy = reqwest::Proxy::all(proxy)
+            .map_err(|err| AppError::invalid_input(format!("Invalid proxy address: {err}")))?;
+        builder = builder.proxy(proxy);
+    }
+    builder
+        .build()
+        .map_err(|err| AppError::internal(format!("Could not set up HTTP: {err}")))
 }
 
 fn header_str(headers: &HeaderMap, name: header::HeaderName) -> Option<String> {
