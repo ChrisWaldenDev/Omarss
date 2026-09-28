@@ -93,14 +93,16 @@ async fn mark_all_read_follows_the_view_and_age_and_can_be_undone() {
         "https://a.example/feed",
         Some(folder),
         10,
-        12 * HOUR,
+        11 * HOUR,
         now,
     )
     .await;
     seed(&app, "https://b.example/feed", None, 4, HOUR, now).await;
     assert_eq!(unread(&app).await, 14);
 
-    // Older than a day in feed A: articles 3–9 (36 h and older).
+    // Older than a day in feed A: articles 3-9 (33 h and older). 11 h steps keep the nearest
+    // article on each side of the 24 h cutoff (22 h / 33 h) well clear of it, so a slow CI run
+    // reading the wall clock a moment after `now` can't tip an article across the boundary.
     let result = app
         .articles
         .mark_all_read(View::Feed { id: a }, Some(OlderThan::Day))
