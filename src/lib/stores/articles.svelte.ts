@@ -1,5 +1,7 @@
 import { api, errorMessage } from "../api";
+import { t } from "../i18n";
 import type { Article, ArticleCursor, ArticleListItem, SortOrder, View } from "../types";
+import { toasts } from "./toasts.svelte";
 
 export const PAGE_SIZE = 100;
 
@@ -36,13 +38,15 @@ export class ArticlesStore {
     const request = ++this.#listRequest;
     this.loading = true;
     this.loadingMore = false;
+    // Cleared now, not when the page arrives: articles announced while the request is in
+    // flight may not be in it, so their notice must survive.
+    this.hasNewArticles = false;
     try {
       const page = await api.listArticles(this.#query(), null, PAGE_SIZE);
       if (request !== this.#listRequest) return;
       this.items = page.items;
       this.next = page.next;
       this.listError = null;
-      this.hasNewArticles = false;
     } catch (error) {
       if (request !== this.#listRequest) return;
       this.items = [];
@@ -97,7 +101,15 @@ export class ArticlesStore {
       const article = await api.getArticle(id);
       if (request !== this.#articleRequest) return;
       this.article = article;
-      if (!article.isRead) await this.setRead(id, true);
+      if (!article.isRead) {
+        // A failed mark-read has already been rolled back by `setRead`; the article stays
+        // open and the failure is reported without blanking the reader.
+        try {
+          await this.setRead(id, true);
+        } catch (error) {
+          toasts.show(t("error.action", { message: errorMessage(error) }));
+        }
+      }
     } catch (error) {
       if (request !== this.#articleRequest) return;
       this.article = null;

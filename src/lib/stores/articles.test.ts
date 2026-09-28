@@ -12,6 +12,8 @@ vi.mock("../api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api")>()),
   api,
 }));
+const toasts = vi.hoisted(() => ({ show: vi.fn() }));
+vi.mock("./toasts.svelte", () => ({ toasts }));
 
 import { ArticlesStore, PAGE_SIZE } from "./articles.svelte";
 
@@ -62,6 +64,7 @@ describe("ArticlesStore", () => {
 
   beforeEach(() => {
     for (const fn of Object.values(api)) fn.mockReset();
+    toasts.show.mockReset();
     api.listArticles.mockResolvedValue(page([item(1), item(2)]));
     api.getArticle.mockImplementation(async (id: number) => article(id));
     api.setArticlesRead.mockResolvedValue(1);
@@ -124,6 +127,17 @@ describe("ArticlesStore", () => {
     expect(api.setArticlesRead).not.toHaveBeenCalled();
   });
 
+  it("keeps the article open when marking it read fails", async () => {
+    await store.load();
+    api.setArticlesRead.mockRejectedValueOnce(new Error("database is locked"));
+    await store.open(1);
+    expect(store.article?.id).toBe(1);
+    expect(store.articleError).toBeNull();
+    expect(store.article?.isRead).toBe(false);
+    expect(store.items[0].isRead).toBe(false);
+    expect(toasts.show).toHaveBeenCalledWith(expect.stringContaining("database is locked"));
+  });
+
   it("stars optimistically and rolls back if saving fails", async () => {
     await store.load();
     await store.open(1);
@@ -177,5 +191,20 @@ describe("ArticlesStore", () => {
     await empty.load();
     empty.notifyNewArticles();
     expect(api.listArticles).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps a new-articles notice that arrives while the list is loading", async () => {
+    await store.load();
+    const slow = deferred<ArticlePage>();
+    api.listArticles.mockReturnValueOnce(slow.promise);
+    const loading = store.load();
+    store.notifyNewArticles();
+    slow.resolve(page([item(1), item(2)]));
+    await loading;
+    expect(store.hasNewArticles).toBe(true);
+
+    // A load that starts afterwards clears it.
+    await store.load();
+    expect(store.hasNewArticles).toBe(false);
   });
 });
