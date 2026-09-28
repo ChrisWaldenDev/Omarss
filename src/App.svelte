@@ -8,6 +8,7 @@
   import Sidebar from "./lib/components/Sidebar.svelte";
   import Toasts from "./lib/components/Toasts.svelte";
   import { t } from "./lib/i18n";
+  import { listenThenLoad } from "./lib/startup";
   import { articles, connectEvents } from "./lib/stores/app.svelte";
   import { clock } from "./lib/stores/clock.svelte";
   import { refresh } from "./lib/stores/refresh.svelte";
@@ -19,18 +20,17 @@
   let startError = $state<string | null>(null);
 
   onMount(() => {
-    let disconnect: (() => void) | undefined;
-    let cancelled = false;
-    connectEvents()
-      .then((stop) => (cancelled ? stop() : (disconnect = stop)))
-      .catch((error) => console.error("could not listen for events", error));
-    Promise.all([settings.load(), sidebar.load(), articles.load(), refresh.load()])
-      .catch((error) => (startError = errorMessage(error)))
-      .finally(() => (ready = true));
+    const disconnect = listenThenLoad(connectEvents, () =>
+      Promise.all([settings.load(), sidebar.load(), articles.load(), refresh.load()])
+        .then(() => {})
+        .catch((error) => {
+          startError = errorMessage(error);
+        })
+        .finally(() => (ready = true)),
+    );
     const stopClock = clock.start();
     return () => {
-      cancelled = true;
-      disconnect?.();
+      disconnect();
       stopClock();
     };
   });
