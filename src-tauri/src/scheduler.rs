@@ -249,7 +249,7 @@ pub(crate) async fn run_batch<R: Runtime>(
     let now = clock::now_unix();
     for (id, _, message) in &unreachable {
         let result = if offline {
-            feeds.defer(*id, now + OFFLINE_RETRY).await
+            feeds.defer(*id, now + OFFLINE_RETRY, settings).await
         } else {
             errors += 1;
             let _ = FeedError {

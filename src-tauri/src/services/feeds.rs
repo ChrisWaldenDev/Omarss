@@ -439,10 +439,16 @@ impl FeedService {
             .await
     }
 
-    /// Moves a feed's next fetch without counting an error (used while offline).
-    pub async fn defer(&self, id: i64, at: i64) -> AppResult<()> {
+    /// Moves a feed's next fetch without counting an error (used while offline). Feeds that
+    /// only refresh manually get no scheduled fetch, as after any other attempt.
+    pub async fn defer(&self, id: i64, at: i64, settings: &Settings) -> AppResult<()> {
+        let settings = settings.clone();
         self.store
-            .run(move |conn| feeds::reschedule(conn, id, Some(at)))
+            .run(move |conn| {
+                let feed = feeds::get(conn, id)?;
+                let next = base_interval(feed.fetch_interval, &settings).map(|_| at);
+                feeds::reschedule(conn, id, next)
+            })
             .await
     }
 

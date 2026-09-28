@@ -10,7 +10,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use super::fixtures::TestApp;
 use crate::clock;
 use crate::events::{ArticlesChanged, FeedError, RefreshDone, RefreshProgress};
-use crate::models::{RefreshStatus, RefreshTarget};
+use crate::models::{FeedUpdate, RefreshStatus, RefreshTarget};
 use crate::scheduler::{run_batch, OFFLINE_RETRY};
 use crate::services::settings::Settings;
 use crate::store::feeds::{self, NewFeed};
@@ -86,6 +86,66 @@ async fn unreachable_everywhere_means_offline_not_broken_feeds() {
         assert_eq!(feed.error_count, 0, "not counted as a feed error");
         let next = feed.next_fetch_at.unwrap();
         assert!((before + OFFLINE_RETRY..=before + OFFLINE_RETRY + 5).contains(&next));
+    }
+}
+
+#[tokio::test]
+async fn going_offline_does_not_schedule_manual_only_feeds() {
+    let app = TestApp::new();
+    let port = closed_port();
+    let manual = add_feed(&app, format!("http://127.0.0.1:{port}/manual")).await;
+    let auto = add_feed(&app, format!("http://localhost:{port}/auto")).await;
+    app.feeds
+        .update(
+            manual,
+            FeedUpdate {
+                custom_title: None,
+                folder_id: None,
+                fetch_interval: Some(0),
+                paused: false,
+            },
+        )
+        .await
+        .unwrap();
+    let tauri_app = mock_app();
+    let before = clock::now_unix();
+
+    // A per-feed "manual only" override: only the automatic feed is retried.
+    let status = Mutex::new(RefreshStatus::default());
+    let jobs = app.feeds.jobs_for(&[RefreshTarget::All]).await.unwrap();
+    run_batch(
+        tauri_app.handle(),
+        &app.feeds,
+        &Settings::default(),
+        &status,
+        jobs,
+    )
+    .await;
+    assert!(status.lock().unwrap().offline);
+    assert_eq!(app.feeds.record(manual).await.unwrap().next_fetch_at, None);
+    let next = app.feeds.record(auto).await.unwrap().next_fetch_at.unwrap();
+    assert!((before + OFFLINE_RETRY..=before + OFFLINE_RETRY + 5).contains(&next));
+
+    // Refreshing is manual-only globally: nothing is retried.
+    let manual_everywhere = Settings {
+        refresh_interval_minutes: 0,
+        ..Settings::default()
+    };
+    let status = Mutex::new(RefreshStatus::default());
+    let jobs = app.feeds.jobs_for(&[RefreshTarget::All]).await.unwrap();
+    run_batch(
+        tauri_app.handle(),
+        &app.feeds,
+        &manual_everywhere,
+        &status,
+        jobs,
+    )
+    .await;
+    assert!(status.lock().unwrap().offline);
+    for id in [manual, auto] {
+        let feed = app.feeds.record(id).await.unwrap();
+        assert_eq!(feed.next_fetch_at, None, "feed {id} stays manual");
+        assert_eq!(feed.error_count, 0);
     }
 }
 
