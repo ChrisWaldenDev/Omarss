@@ -6,9 +6,12 @@
 
 <div class="toasts" role="status" aria-live="polite">
   {#each toasts.items as toast (toast.id)}
-    <div class="toast">
-      <span>{toast.message}</span>
-      <button aria-label={t("dialog.close")} onclick={() => toasts.dismiss(toast.id)}>
+    <div class="toast" class:info={toast.kind === "info"}>
+      <span class="message">{toast.message}</span>
+      {#if toast.action}
+        <button class="action" onclick={() => toasts.act(toast.id)}>{toast.action.label}</button>
+      {/if}
+      <button class="close" aria-label={t("dialog.close")} onclick={() => toasts.dismiss(toast.id)}>
         <Icon name="close" size={14} />
       </button>
     </div>
@@ -24,14 +27,14 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-width: 24rem;
+    max-width: 26rem;
   }
 
   .toast {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
-    padding: 10px 10px 10px 14px;
+    padding: 8px 10px 8px 14px;
     border: 1px solid var(--border);
     border-left: 3px solid var(--danger);
     border-radius: var(--radius);
@@ -40,7 +43,25 @@
     font-size: 0.88rem;
   }
 
-  button {
+  .toast.info {
+    border-left-color: var(--accent);
+  }
+
+  .message {
+    flex: 1;
+  }
+
+  .action {
+    flex: none;
+    padding: 3px 10px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: none;
+    color: var(--accent-text);
+    font-weight: 600;
+  }
+
+  .close {
     display: grid;
     flex: none;
     place-items: center;

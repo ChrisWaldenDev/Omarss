@@ -26,7 +26,8 @@ describe("relativeTime", () => {
 
 describe("fileSize", () => {
   it("picks a readable unit", () => {
-    expect(fileSize(512, "en")).toBe("512 byte");
+    expect(fileSize(512, "en")).toBe("512 bytes");
+    expect(fileSize(1, "en")).toBe("1 byte");
     expect(fileSize(2_500, "en")).toBe("2.5 kB");
     expect(fileSize(24_000_000, "en")).toBe("24 MB");
   });

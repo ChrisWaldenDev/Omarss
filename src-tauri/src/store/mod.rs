@@ -5,6 +5,7 @@
 pub mod articles;
 pub mod feeds;
 pub mod folders;
+pub mod maintenance;
 pub mod migrations;
 pub mod settings;
 

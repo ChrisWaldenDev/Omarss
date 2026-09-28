@@ -24,6 +24,29 @@ pub fn open_external<R: Runtime>(app: &AppHandle<R>, url: &Url) -> AppResult<()>
         .map_err(|err| AppError::internal(format!("Could not open the link: {err}")))
 }
 
+/// Hosts that click-to-load video embeds (SPEC §8.2) navigate their iframes to. On Linux,
+/// WebKitGTK reports iframe navigations to the guard as well, so these must load in place
+/// rather than open in the browser. The CSP's `frame-src` still limits which embeds the app
+/// itself creates.
+const EMBED_HOSTS: [&str; 7] = [
+    "youtube-nocookie.com",
+    "youtube.com",
+    "google.com",
+    "gstatic.com",
+    "vimeo.com",
+    "vimeocdn.com",
+    "doubleclick.net",
+];
+
+fn is_embed_navigation(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.host_str().is_some_and(|host| {
+            EMBED_HOSTS
+                .iter()
+                .any(|h| host == *h || host.ends_with(&format!(".{h}")))
+        })
+}
+
 /// Whether `url` is one of the app's own pages (bundled assets, or the dev server in debug).
 fn is_app_url(url: &Url, dev_url: Option<&Url>) -> bool {
     match url.scheme() {
@@ -44,7 +67,7 @@ pub fn guard<R: Runtime>() -> TauriPlugin<R> {
             } else {
                 None
             };
-            if is_app_url(url, dev_url) {
+            if is_app_url(url, dev_url) || is_embed_navigation(url) {
                 return true;
             }
             if is_external_link(url) {
@@ -85,6 +108,19 @@ mod tests {
         assert!(!is_app_url(&url("https://example.com/"), Some(&dev)));
         assert!(!is_app_url(&url("http://localhost:8080/"), Some(&dev)));
         assert!(!is_app_url(&url("file:///etc/passwd"), None));
+    }
+
+    #[test]
+    fn video_embeds_navigate_in_place() {
+        assert!(is_embed_navigation(&url(
+            "https://www.youtube-nocookie.com/embed/abc"
+        )));
+        assert!(is_embed_navigation(&url(
+            "https://player.vimeo.com/video/1"
+        )));
+        assert!(!is_embed_navigation(&url("http://www.youtube.com/")));
+        assert!(!is_embed_navigation(&url("https://notyoutube.com/")));
+        assert!(!is_embed_navigation(&url("https://example.com/")));
     }
 
     #[test]

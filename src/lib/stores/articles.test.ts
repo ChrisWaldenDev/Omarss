@@ -7,6 +7,8 @@ const api = vi.hoisted(() => ({
   getArticle: vi.fn(),
   setArticlesRead: vi.fn(),
   setArticleStarred: vi.fn(),
+  markAllRead: vi.fn(),
+  undoMarkAllRead: vi.fn(),
 }));
 vi.mock("../api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api")>()),
@@ -27,6 +29,7 @@ function item(id: number, overrides: Partial<ArticleListItem> = {}): ArticleList
     publishedAt: 1000 - id,
     isRead: false,
     isStarred: false,
+    thumbnail: null,
     ...overrides,
   };
 }
@@ -40,6 +43,7 @@ function article(id: number, overrides: Partial<Article> = {}): Article {
     url: null,
     author: null,
     contentHtml: "<p>hi</p>",
+    imagesBlocked: false,
     publishedAt: 0,
     isRead: false,
     isStarred: false,
@@ -206,5 +210,112 @@ describe("ArticlesStore", () => {
     // A load that starts afterwards clears it.
     await store.load();
     expect(store.hasNewArticles).toBe(false);
+  });
+
+  it("moves the cursor with or without opening (j/k, n/p)", async () => {
+    api.listArticles.mockResolvedValue(page([item(1), item(2), item(3)]));
+    await store.load();
+    await store.move(1, false);
+    expect(store.selectedId).toBe(1);
+    expect(store.article).toBeNull();
+    await store.move(1, false);
+    expect(store.selectedId).toBe(2);
+    await store.openSelected();
+    expect(store.article?.id).toBe(2);
+    await store.move(1, true);
+    expect(store.article?.id).toBe(3);
+    await store.move(1, true);
+    expect(store.article?.id).toBe(3); // stays on the last article
+    await store.move(-1, true);
+    expect(store.article?.id).toBe(2);
+  });
+
+  it("loads the next page when moving past the loaded rows", async () => {
+    api.listArticles
+      .mockResolvedValueOnce(page([item(1)], { publishedAt: 999, id: 1 }))
+      .mockResolvedValueOnce(page([item(2)]));
+    await store.load();
+    await store.move(1, false);
+    await store.move(1, true);
+    expect(store.article?.id).toBe(2);
+  });
+
+  it("toggles read state", async () => {
+    await store.load();
+    await store.open(1);
+    await store.toggleRead(1);
+    expect(api.setArticlesRead).toHaveBeenLastCalledWith([1], false);
+    expect(store.article?.isRead).toBe(false);
+    await store.toggleRead(1);
+    expect(api.setArticlesRead).toHaveBeenLastCalledWith([1], true);
+  });
+
+  it("marks all read in the current view and undoes it", async () => {
+    await store.showView({ kind: "feed", id: 4 });
+    await store.open(1);
+    api.markAllRead.mockResolvedValue({ count: 2, undoToken: 7 });
+    api.getArticle.mockResolvedValueOnce(article(1, { isRead: true }));
+    const result = await store.markAllRead("week");
+    expect(api.markAllRead).toHaveBeenCalledWith({ kind: "feed", id: 4 }, "week");
+    expect(result).toEqual({ count: 2, undoToken: 7 });
+    expect(countsChanged).toHaveBeenCalled();
+    expect(api.listArticles).toHaveBeenCalledTimes(2);
+
+    api.undoMarkAllRead.mockResolvedValue(2);
+    await store.undoMarkAllRead(7);
+    expect(api.undoMarkAllRead).toHaveBeenCalledWith(7);
+    expect(api.listArticles).toHaveBeenCalledTimes(3);
+  });
+
+  it("doesn't reload when nothing was marked", async () => {
+    await store.load();
+    api.markAllRead.mockResolvedValue({ count: 0, undoToken: null });
+    await store.markAllRead();
+    expect(api.listArticles).toHaveBeenCalledTimes(1);
+  });
+
+  it("can mark read after a delay instead of on open", async () => {
+    vi.useFakeTimers();
+    try {
+      store.markRead = { mode: "afterDelay", delaySeconds: 3 };
+      await store.load();
+      await store.open(1);
+      expect(api.setArticlesRead).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(api.setArticlesRead).toHaveBeenCalledWith([1], true);
+
+      // Moving on before the delay leaves the article unread.
+      api.setArticlesRead.mockClear();
+      await store.open(2);
+      await vi.advanceTimersByTimeAsync(1000);
+      await store.open(1);
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(api.setArticlesRead).not.toHaveBeenCalledWith([2], true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("marks articles scrolled past as read, rolling back on failure", async () => {
+    await store.load();
+    await store.markScrolledPast([1, 2]);
+    expect(api.setArticlesRead).toHaveBeenCalledWith([1, 2], true);
+    expect(store.items.every((i) => i.isRead)).toBe(true);
+
+    api.listArticles.mockResolvedValue(page([item(1), item(2)]));
+    await store.load();
+    api.setArticlesRead.mockRejectedValueOnce(new Error("locked"));
+    await expect(store.markScrolledPast([1])).rejects.toThrow("locked");
+    expect(store.items[0].isRead).toBe(false);
+  });
+
+  it("switches between the broken-feeds page and article views", async () => {
+    await store.load();
+    await store.open(1);
+    store.showBrokenFeeds();
+    expect(store.brokenFeedsOpen).toBe(true);
+    expect(store.article).toBeNull();
+    await store.showView({ kind: "unread" });
+    expect(store.brokenFeedsOpen).toBe(false);
   });
 });

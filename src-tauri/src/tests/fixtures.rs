@@ -31,6 +31,7 @@ pub struct TestApp {
     pub store: Store,
     pub feeds: FeedService,
     pub articles: ArticleService,
+    pub settings: SettingsService,
 }
 
 impl TestApp {
@@ -42,14 +43,20 @@ impl TestApp {
         )
         .unwrap();
         let settings = SettingsService::new(store.clone());
-        let http = HttpClient::new("test").unwrap();
-        let feeds = FeedService::new(store.clone(), http, settings, dir.path().join("icons"));
-        let articles = ArticleService::new(store.clone());
+        let http = HttpClient::new("test", None).unwrap();
+        let feeds = FeedService::new(
+            store.clone(),
+            http,
+            settings.clone(),
+            dir.path().join("icons"),
+        );
+        let articles = ArticleService::new(store.clone(), settings.clone());
         Self {
             _dir: dir,
             store,
             feeds,
             articles,
+            settings,
         }
     }
 

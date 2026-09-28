@@ -6,7 +6,39 @@ A fast, keyboard-friendly desktop RSS/Atom reader for Linux and Windows. `SPEC.m
 
 ## Download
 
-Every merge to `main` publishes installers on the [Releases page](https://github.com/ChrisWaldenDev/omarss/releases): `.AppImage`, `.deb` and `.rpm` for Linux, and `-setup.exe` or `.msi` for Windows. The Windows installers are not code-signed yet, so SmartScreen may warn the first time you run them.
+Every merge to `main` publishes installers on the [Releases page](https://github.com/ChrisWaldenDev/omarss/releases).
+
+### Linux
+
+- **AppImage** (`.AppImage`, works on most distros): download it, then make it executable and run it:
+
+  ```sh
+  chmod +x Omarss_*_amd64.AppImage
+  ./Omarss_*_amd64.AppImage
+  ```
+
+  To integrate it with your desktop launcher, move it somewhere permanent (e.g. `~/.local/bin/`) and create a `.desktop` file at `~/.local/share/applications/omarss.desktop`:
+
+  ```ini
+  [Desktop Entry]
+  Name=Omarss
+  Exec=/home/you/.local/bin/Omarss.AppImage
+  Icon=/home/you/.local/share/omarss/icon.png
+  Type=Application
+  Categories=Network;News;
+  ```
+
+  Then run `update-desktop-database ~/.local/share/applications` (if available) so it shows up in app launchers.
+
+- **`.deb`** (Debian, Ubuntu and derivatives): `sudo apt install ./Omarss_*_amd64.deb`
+- **`.rpm`** (Fedora, openSUSE and derivatives): `sudo dnf install ./Omarss-*.x86_64.rpm` (or `rpm -i` / `zypper install`)
+
+### Windows
+
+- **`-setup.exe`**: run it and follow the installer.
+- **`.msi`**: double-click it, or run `msiexec /i Omarss_*_x64_en-US.msi` from a terminal.
+
+The Windows installers are not code-signed yet, so SmartScreen may warn the first time you run them.
 
 ## Development
 

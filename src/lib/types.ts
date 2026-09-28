@@ -6,8 +6,14 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 /** Commands */
 export const commands = {
 	getSettings: () => typedError<Settings, AppError>(__TAURI_INVOKE("get_settings")),
-	/**  Saves the full settings object and returns what was stored. */
+	/**
+	 *  Saves the full settings object and returns what was stored. Changes apply straight away
+	 *  (SPEC §11.2).
+	 */
 	updateSettings: (settings: Settings) => typedError<Settings, AppError>(__TAURI_INVOKE("update_settings", { settings })),
+	getAppInfo: () => typedError<AppInfo, AppError>(__TAURI_INVOKE("get_app_info")),
+	/**  The user's `custom.css` from the config folder, if there is one (SPEC §6.8). */
+	getCustomCss: () => typedError<string | null, AppError>(__TAURI_INVOKE("get_custom_css")),
 	getSidebar: () => typedError<Sidebar, AppError>(__TAURI_INVOKE("get_sidebar")),
 	/**  One page of the list. Pass the previous page's `next` as `after` to continue. */
 	listArticles: (query: ArticleQuery, after: {
@@ -18,6 +24,13 @@ export const commands = {
 	/**  Marks articles read or unread; returns how many changed. */
 	setArticlesRead: (ids: number[], read: boolean) => typedError<number, AppError>(__TAURI_INVOKE("set_articles_read", { ids, read })),
 	setArticleStarred: (id: number, starred: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_article_starred", { id, starred })),
+	/**
+	 *  "Mark all as read" for a view, optionally only articles older than a day or a week
+	 *  (SPEC §6.2). The result carries a token for `undo_mark_all_read`.
+	 */
+	markAllRead: (view: View, olderThan: "day" | "week" | null) => typedError<MarkAllReadResult, AppError>(__TAURI_INVOKE("mark_all_read", { view, olderThan })),
+	/**  Undoes a "Mark all as read"; returns how many articles are unread again. */
+	undoMarkAllRead: (token: number) => typedError<number, AppError>(__TAURI_INVOKE("undo_mark_all_read", { token })),
 	/**  Finds the feeds behind a feed or website address. */
 	discoverFeeds: (url: string) => typedError<DiscoveredFeed[], AppError>(__TAURI_INVOKE("discover_feeds", { url })),
 	previewFeed: (url: string) => typedError<FeedPreview, AppError>(__TAURI_INVOKE("preview_feed", { url })),
@@ -35,6 +48,27 @@ export const commands = {
 	reorderSidebar: (order: SidebarOrder) => typedError<null, AppError>(__TAURI_INVOKE("reorder_sidebar", { order })),
 	refresh: (target: RefreshTarget) => typedError<null, AppError>(__TAURI_INVOKE("refresh", { target })),
 	getRefreshStatus: () => typedError<RefreshStatus, AppError>(__TAURI_INVOKE("get_refresh_status")),
+	/**
+	 *  Asks for an OPML file and subscribes to its feeds. `None` if the user cancelled. The new
+	 *  feeds are fetched in the background by the scheduler (with `refresh:progress`).
+	 */
+	importOpml: () => typedError<{
+	feeds: number,
+	folders: number,
+	/**  Already subscribed, or listed twice in the file. */
+	duplicates: number,
+	/**  Outlines whose address isn't a web address. */
+	invalid: number,
+} | null, AppError>(__TAURI_INVOKE("import_opml")),
+	/**
+	 *  Asks where to save and writes an OPML 2.0 file of every feed. Returns the file's path, or
+	 *  `None` if the user cancelled.
+	 */
+	exportOpml: () => typedError<string | null, AppError>(__TAURI_INVOKE("export_opml")),
+	getStorageInfo: () => typedError<StorageInfo, AppError>(__TAURI_INVOKE("get_storage_info")),
+	clearImageCache: () => typedError<null, AppError>(__TAURI_INVOKE("clear_image_cache")),
+	/**  Deletes expired articles and compacts the database. */
+	compactDatabase: () => typedError<null, AppError>(__TAURI_INVOKE("compact_database")),
 	/**  Opens a link in the OS default browser or mail client (SPEC §6.2, §8.2). */
 	openExternal: (url: string) => typedError<null, AppError>(__TAURI_INVOKE("open_external", { url })),
 };
@@ -58,6 +92,17 @@ export type AppError = {
 	message: string,
 };
 
+/**  Facts about this installation for Settings → About and platform-specific settings. */
+export type AppInfo = {
+	version: string,
+	platform: string,
+	homepage: string,
+	dataDir: string,
+	configDir: string,
+	/**  Metered-connection detection is available (Windows). */
+	meteredSupported: boolean,
+};
+
 export type Article = {
 	id: number,
 	feedId: number,
@@ -65,8 +110,13 @@ export type Article = {
 	title: string,
 	url: string | null,
 	author: string | null,
-	/**  Sanitised HTML. */
+	/**  Sanitised HTML, prepared for display: images point at the image proxy (SPEC §8.4). */
 	contentHtml: string,
+	/**
+	 *  Images wait for a click ("Load remote images: Never"); their addresses are in
+	 *  `data-omarss-src`/`data-omarss-srcset`/`data-omarss-poster`.
+	 */
+	imagesBlocked: boolean,
 	publishedAt: number | null,
 	isRead: boolean,
 	isStarred: boolean,
@@ -89,6 +139,8 @@ export type ArticleListItem = {
 	publishedAt: number | null,
 	isRead: boolean,
 	isStarred: boolean,
+	/**  Image-proxy URL of the list thumbnail, when thumbnails are on (SPEC §6.2). */
+	thumbnail: string | null,
 };
 
 export type ArticlePage = {
@@ -145,6 +197,8 @@ export type FeedDetails = {
 	errorCount: number,
 	lastError: string | null,
 	lastFetchedAt: number | null,
+	/**  User-Agent override for sites that block unknown agents (SPEC §7.1). */
+	userAgent: string | null,
 };
 
 export type FeedError = {
@@ -180,12 +234,16 @@ export type FeedPreview = {
 };
 
 export type FeedUpdate = {
+	/**  The feed address; changing it resets the feed's error state and fetches it again. */
+	url: string,
 	/**  Empty or `None` clears the custom title. */
 	customTitle: string | null,
 	folderId: number | null,
 	/**  See [`FeedDetails::fetch_interval`]. */
 	fetchInterval: number | null,
 	paused: boolean,
+	/**  Empty or `None` uses the default User-Agent. */
+	userAgent: string | null,
 };
 
 export type FolderNode = {
@@ -195,11 +253,51 @@ export type FolderNode = {
 	feeds: FeedNode[],
 };
 
+/**  What an OPML import did (SPEC §6.4). */
+export type ImportSummary = {
+	feeds: number,
+	folders: number,
+	/**  Already subscribed, or listed twice in the file. */
+	duplicates: number,
+	/**  Outlines whose address isn't a web address. */
+	invalid: number,
+};
+
+/**  Three panes side by side, or two with the list expanding into the reader (SPEC §6.2). */
+export type Layout = "threePane" | "twoPane";
+
+/**  "Load remote images" (SPEC §8.4). */
+export type LoadImages = 
+/**  Everywhere, including list thumbnails. */
+"always" | 
+/**  Only in articles you open (no list thumbnails). */
+"opened" | 
+/**  Never automatically; the reader offers a button to load them. */
+"never";
+
+export type MarkAllReadResult = {
+	count: number,
+	/**  Pass to `undo_mark_all_read`; `None` when nothing changed. */
+	undoToken: number | null,
+};
+
+/**  When an article counts as read (SPEC §6.2). */
+export type MarkReadMode = "onOpen" | 
+/**  After it has been open for `markReadDelaySeconds`. */
+"afterDelay" | 
+/**  When it scrolls past the top of the list (and when opened). */
+"onScroll";
+
+/**  "Mark all as read" can be limited to older articles (SPEC §6.2). */
+export type OlderThan = "day" | "week";
+
 export type PreviewItem = {
 	title: string,
 	url: string | null,
 	publishedAt: number | null,
 };
+
+export type ReaderFont = "system" | "sans" | "serif";
 
 export type RefreshDone = {
 	newCount: number,
@@ -234,6 +332,40 @@ export type Settings = {
 	refreshOnStartup: boolean,
 	/**  Mark an article unread again when its feed updates it (SPEC §7.4). */
 	markUpdatedUnread: boolean,
+	/**  Skip automatic refresh on metered connections (SPEC §7.2; Windows only). */
+	pauseOnMetered: boolean,
+	layout: Layout,
+	markReadMode: MarkReadMode,
+	markReadDelaySeconds: number,
+	listThumbnails: boolean,
+	readerFont: ReaderFont,
+	/**  Pixels. */
+	readerFontSize: number,
+	/**  Maximum line length in characters. */
+	readerLineWidth: number,
+	/**  Percent of the font size. */
+	readerLineHeight: number,
+	/**  `#rrggbb`, or `None` for the theme's own accent (SPEC §6.8). */
+	accentColor: string | null,
+	/**  Percent, 80–150 (SPEC §6.8). */
+	uiScale: number,
+	/**  Pane widths in pixels (SPEC §6.8: resizable and persisted). */
+	sidebarWidth: number,
+	listWidth: number,
+	/**  Keep articles this many days; `0` keeps them forever (SPEC §6.9). */
+	retentionDays: number,
+	loadImages: LoadImages,
+	/**  Remove `utm_*` parameters from article links (SPEC §8.4). */
+	stripTrackingParams: boolean,
+	/**  Image cache limit in megabytes (SPEC §8.4). */
+	imageCacheMb: number,
+	/**  Manual `http://`, `https://` or `socks5://` proxy; empty uses the system proxy (SPEC §7.1). */
+	proxyUrl: string,
+	/**
+	 *  Rebound keyboard shortcuts: action id → keys. Actions not listed use their defaults
+	 *  (SPEC §6.7).
+	 */
+	shortcuts: { [key in string]: string[] },
 };
 
 export type Sidebar = {
@@ -255,6 +387,14 @@ export type SidebarOrder = {
 };
 
 export type SortOrder = "newestFirst" | "oldestFirst";
+
+/**  Sizes shown in Settings → Storage (SPEC §6.9). */
+export type StorageInfo = {
+	databaseBytes: number,
+	imageCacheBytes: number,
+	articleCount: number,
+	dataDir: string,
+};
 
 export type SubscribeRequest = {
 	url: string,

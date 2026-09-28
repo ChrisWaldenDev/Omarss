@@ -23,4 +23,4 @@
 - Every merge to `main` publishes a GitHub Release with Linux and Windows installers (`.github/workflows/release.yml`), so anything merged ships.
 
 ## Status
-Completed: **M1 (Skeleton)**, **M2 (Local feeds core)**. Next: **M3 (Daily-driver polish)**. Update this line when a milestone is completed.
+Completed: **M1 (Skeleton)**, **M2 (Local feeds core)**, **M3 (Daily-driver polish)**. Next: **M4 (Search & organisation)**. Update this line when a milestone is completed.

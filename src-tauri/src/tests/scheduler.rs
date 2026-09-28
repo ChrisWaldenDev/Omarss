@@ -95,10 +95,13 @@ async fn going_offline_does_not_schedule_manual_only_feeds() {
     let port = closed_port();
     let manual = add_feed(&app, format!("http://127.0.0.1:{port}/manual")).await;
     let auto = add_feed(&app, format!("http://localhost:{port}/auto")).await;
+    let manual_url = app.feeds.details(manual).await.unwrap().url;
     app.feeds
         .update(
             manual,
             FeedUpdate {
+                url: manual_url,
+                user_agent: None,
                 custom_title: None,
                 folder_id: None,
                 fetch_interval: Some(0),
@@ -273,8 +276,12 @@ async fn a_refresh_with_nothing_to_fetch_still_finishes() {
     let app = TestApp::new();
     let tauri_app = mock_app();
     let settings = crate::services::settings::SettingsService::new(app.store.clone());
-    let scheduler =
-        crate::scheduler::Scheduler::start(tauri_app.handle().clone(), app.feeds.clone(), settings);
+    let scheduler = crate::scheduler::Scheduler::start(
+        tauri_app.handle().clone(),
+        app.feeds.clone(),
+        settings,
+        None,
+    );
     scheduler.request(RefreshTarget::All);
     let mut status = scheduler.status();
     for _ in 0..40 {

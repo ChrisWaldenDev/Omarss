@@ -3,7 +3,9 @@
 use tauri::State;
 
 use crate::error::AppResult;
-use crate::models::{Article, ArticleCursor, ArticlePage, ArticleQuery, Sidebar};
+use crate::models::{
+    Article, ArticleCursor, ArticlePage, ArticleQuery, MarkAllReadResult, OlderThan, Sidebar, View,
+};
 use crate::services::articles::ArticleService;
 
 #[tauri::command]
@@ -49,4 +51,23 @@ pub async fn set_article_starred(
     starred: bool,
 ) -> AppResult<()> {
     service.set_starred(id, starred).await
+}
+
+/// "Mark all as read" for a view, optionally only articles older than a day or a week
+/// (SPEC §6.2). The result carries a token for `undo_mark_all_read`.
+#[tauri::command]
+#[specta::specta]
+pub async fn mark_all_read(
+    service: State<'_, ArticleService>,
+    view: View,
+    older_than: Option<OlderThan>,
+) -> AppResult<MarkAllReadResult> {
+    service.mark_all_read(view, older_than).await
+}
+
+/// Undoes a "Mark all as read"; returns how many articles are unread again.
+#[tauri::command]
+#[specta::specta]
+pub async fn undo_mark_all_read(service: State<'_, ArticleService>, token: u32) -> AppResult<u32> {
+    service.undo_mark_all_read(token).await
 }

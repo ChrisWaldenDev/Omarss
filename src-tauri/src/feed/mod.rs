@@ -2,14 +2,14 @@
 //! [`ParsedFeed`]. RSS 0.9x/1.0/2.0, Atom and JSON Feed are supported.
 
 mod dates;
-mod encoding;
+pub(crate) mod encoding;
 
 use feed_rs::model::{self, Entry, FeedType, Text};
 use url::Url;
 
 use crate::content::{
-    collapse_whitespace, decode_entities, html_to_text, sanitize_html, sha256_hex, text_to_html,
-    truncate_words,
+    collapse_whitespace, decode_entities, first_image, html_to_text, sanitize_html, sha256_hex,
+    text_to_html, truncate_words,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,6 +38,9 @@ pub struct ParsedItem {
     pub published_at: Option<i64>,
     pub updated_at: Option<i64>,
     pub enclosures: Vec<ParsedEnclosure>,
+    /// Image for the article list: a Media RSS thumbnail, else the first image in the content
+    /// (SPEC §6.2, §7.3).
+    pub thumbnail_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,6 +209,13 @@ fn convert_entry(
         .find_map(|p| p.name.as_deref().map(str::trim).filter(|n| !n.is_empty()))
         .map(|name| collapse_whitespace(&decode_entities(name)));
 
+    let thumbnail_url = media_thumbnail(&entry, feed_base).or_else(|| {
+        content_html
+            .as_deref()
+            .and_then(first_image)
+            .or_else(|| summary_html.as_deref().and_then(first_image))
+    });
+
     ParsedItem {
         guid,
         url,
@@ -216,7 +226,26 @@ fn convert_entry(
         published_at,
         updated_at,
         enclosures: enclosures(&entry, feed_base, is_json),
+        thumbnail_url,
     }
+}
+
+/// `media:thumbnail`, else an image `media:content` (SPEC §7.3).
+fn media_thumbnail(entry: &Entry, base: Option<&Url>) -> Option<String> {
+    let thumbnails = entry
+        .media
+        .iter()
+        .flat_map(|m| m.thumbnails.iter().map(|t| t.image.uri.as_str()));
+    let images = entry.media.iter().flat_map(|m| {
+        m.content
+            .iter()
+            .filter(|c| c.content_type.as_ref().is_some_and(|t| t.ty() == "image"))
+            .filter_map(|c| c.url.as_ref().map(|u| u.as_str()))
+    });
+    thumbnails
+        .chain(images)
+        .find_map(|uri| absolute(uri, base))
+        .filter(|uri| uri.starts_with("http"))
 }
 
 /// `<enclosure>` and `media:content` (feed-rs puts both in `media`), Atom `rel="enclosure"`

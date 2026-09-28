@@ -257,6 +257,7 @@ impl FeedService {
             max_bytes: FEED_MAX_BYTES,
             etag: feed.etag.as_deref(),
             last_modified: feed.last_modified.as_deref(),
+            user_agent: feed.user_agent.as_deref(),
         };
         let response = match self.http.get(request).await {
             Ok(response) => response,
@@ -520,7 +521,8 @@ impl FeedService {
             .await
     }
 
-    /// Edit feed (SPEC §6.1): custom title, folder, refresh interval, pause.
+    /// Edit feed (SPEC §6.1): address, custom title, folder, refresh interval, pause and
+    /// User-Agent override.
     pub async fn update(&self, id: i64, update: FeedUpdate) -> AppResult<FeedDetails> {
         if let Some(secs) = update.fetch_interval {
             if secs != 0 && secs < MIN_AUTO_INTERVAL {
@@ -528,6 +530,18 @@ impl FeedService {
                     "Feeds can't refresh more often than every 10 minutes",
                 ));
             }
+        }
+        let user_agent = update
+            .user_agent
+            .as_deref()
+            .map(str::trim)
+            .filter(|ua| !ua.is_empty())
+            .map(str::to_string);
+        if user_agent
+            .as_deref()
+            .is_some_and(|ua| ua.len() > 512 || ua.chars().any(char::is_control))
+        {
+            return Err(AppError::invalid_input("That User-Agent isn't valid"));
         }
         let settings = self.settings.get().await?;
         self.store
@@ -539,13 +553,32 @@ impl FeedService {
                         return Err(AppError::invalid_input("That folder no longer exists"));
                     }
                 }
+                let url_changed = update.url.trim() != feed.url;
+                if url_changed {
+                    if feed.is_deleted_feeds() {
+                        return Err(AppError::invalid_input("\"Deleted feeds\" has no address"));
+                    }
+                    let url = normalize_input_url(&update.url)?;
+                    feeds::change_url(&tx, id, url.as_str())?;
+                }
                 let now = clock::now_unix();
+                // A new address is fetched straight away (unless paused or manual-only).
+                let last_fetched_at = if url_changed {
+                    None
+                } else {
+                    feed.last_fetched_at
+                };
                 let next_fetch_at =
                     base_interval(update.fetch_interval, &settings).map(|interval| {
-                        feed.last_fetched_at
+                        last_fetched_at
                             .map_or(now, |last| last + interval.max(MIN_AUTO_INTERVAL))
                             .max(now)
                     });
+                let next_fetch_at = if url_changed && next_fetch_at.is_none() {
+                    Some(now)
+                } else {
+                    next_fetch_at
+                };
                 let custom_title = update
                     .custom_title
                     .as_deref()
@@ -560,6 +593,7 @@ impl FeedService {
                         fetch_interval: update.fetch_interval,
                         paused: update.paused,
                         next_fetch_at,
+                        user_agent: user_agent.as_deref(),
                     },
                 )?;
                 let details = feeds::get(&tx, id)?.details();
@@ -665,6 +699,7 @@ fn to_new_articles(items: &[ParsedItem], now: i64) -> Vec<NewArticle> {
                     length: e.length,
                 })
                 .collect(),
+            thumbnail_url: item.thumbnail_url.clone(),
         })
         .collect()
 }
@@ -692,6 +727,7 @@ mod tests {
             published_at,
             updated_at: None,
             enclosures: Vec::new(),
+            thumbnail_url: None,
         };
         let now = 1_000_000;
         let rows = to_new_articles(

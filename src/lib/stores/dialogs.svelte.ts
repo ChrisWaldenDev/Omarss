@@ -1,6 +1,11 @@
+export type SettingsSection =
+  "general" | "reading" | "refresh" | "appearance" | "keyboard" | "privacy" | "storage" | "about";
+
 export type DialogState =
   | { kind: "addFeed" }
-  | { kind: "editFeed"; feedId: number }
+  | { kind: "editFeed"; feedId: number; focusUrl?: boolean }
+  | { kind: "settings"; section?: SettingsSection }
+  | { kind: "shortcuts" }
   | { kind: "folder"; folderId: number | null; name: string }
   | {
       kind: "confirm";

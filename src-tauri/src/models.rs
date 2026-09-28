@@ -108,6 +108,8 @@ pub struct ArticleListItem {
     pub published_at: Option<i64>,
     pub is_read: bool,
     pub is_starred: bool,
+    /// Image-proxy URL of the list thumbnail, when thumbnails are on (SPEC §6.2).
+    pub thumbnail: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -119,8 +121,11 @@ pub struct Article {
     pub title: String,
     pub url: Option<String>,
     pub author: Option<String>,
-    /// Sanitised HTML.
+    /// Sanitised HTML, prepared for display: images point at the image proxy (SPEC §8.4).
     pub content_html: String,
+    /// Images wait for a click ("Load remote images: Never"); their addresses are in
+    /// `data-omarss-src`/`data-omarss-srcset`/`data-omarss-poster`.
+    pub images_blocked: bool,
     pub published_at: Option<i64>,
     pub is_read: bool,
     pub is_starred: bool,
@@ -188,17 +193,23 @@ pub struct FeedDetails {
     pub error_count: u32,
     pub last_error: Option<String>,
     pub last_fetched_at: Option<i64>,
+    /// User-Agent override for sites that block unknown agents (SPEC §7.1).
+    pub user_agent: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FeedUpdate {
+    /// The feed address; changing it resets the feed's error state and fetches it again.
+    pub url: String,
     /// Empty or `None` clears the custom title.
     pub custom_title: Option<String>,
     pub folder_id: Option<i64>,
     /// See [`FeedDetails::fetch_interval`].
     pub fetch_interval: Option<i64>,
     pub paused: bool,
+    /// Empty or `None` uses the default User-Agent.
+    pub user_agent: Option<String>,
 }
 
 /// The full sidebar order after a drag and drop: folders top to bottom, then every feed top
@@ -235,4 +246,64 @@ pub struct RefreshStatus {
     /// network to come back (SPEC §7.2).
     pub offline: bool,
     pub last_finished_at: Option<i64>,
+}
+
+/// "Mark all as read" can be limited to older articles (SPEC §6.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum OlderThan {
+    Day,
+    Week,
+}
+
+impl OlderThan {
+    pub fn seconds(self) -> i64 {
+        match self {
+            OlderThan::Day => 86_400,
+            OlderThan::Week => 7 * 86_400,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkAllReadResult {
+    pub count: u32,
+    /// Pass to `undo_mark_all_read`; `None` when nothing changed.
+    pub undo_token: Option<u32>,
+}
+
+/// What an OPML import did (SPEC §6.4).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportSummary {
+    pub feeds: u32,
+    pub folders: u32,
+    /// Already subscribed, or listed twice in the file.
+    pub duplicates: u32,
+    /// Outlines whose address isn't a web address.
+    pub invalid: u32,
+}
+
+/// Sizes shown in Settings → Storage (SPEC §6.9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageInfo {
+    pub database_bytes: u64,
+    pub image_cache_bytes: u64,
+    pub article_count: u32,
+    pub data_dir: String,
+}
+
+/// Facts about this installation for Settings → About and platform-specific settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AppInfo {
+    pub version: String,
+    pub platform: String,
+    pub homepage: String,
+    pub data_dir: String,
+    pub config_dir: String,
+    /// Metered-connection detection is available (Windows).
+    pub metered_supported: bool,
 }

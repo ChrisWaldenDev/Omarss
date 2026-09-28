@@ -1,5 +1,7 @@
 //! Repository for `feeds` (and the account they belong to).
 
+use std::collections::HashSet;
+
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
 
 use crate::error::{AppError, AppResult};
@@ -80,6 +82,7 @@ pub struct FeedRecord {
     pub error_count: u32,
     pub last_error: Option<String>,
     pub paused: bool,
+    pub user_agent: Option<String>,
 }
 
 impl FeedRecord {
@@ -100,12 +103,14 @@ impl FeedRecord {
             error_count: self.error_count,
             last_error: self.last_error.clone(),
             last_fetched_at: self.last_fetched_at,
+            user_agent: self.user_agent.clone(),
         }
     }
 }
 
 const RECORD_COLUMNS: &str = "id, url, title, custom_title, site_url, folder_id, icon_path, etag,
-    last_modified, last_fetched_at, next_fetch_at, fetch_interval, error_count, last_error, paused";
+    last_modified, last_fetched_at, next_fetch_at, fetch_interval, error_count, last_error, paused,
+    user_agent";
 
 fn record(row: &Row) -> rusqlite::Result<FeedRecord> {
     Ok(FeedRecord {
@@ -124,6 +129,7 @@ fn record(row: &Row) -> rusqlite::Result<FeedRecord> {
         error_count: row.get(12)?,
         last_error: row.get(13)?,
         paused: row.get(14)?,
+        user_agent: row.get(15)?,
     })
 }
 
@@ -303,12 +309,13 @@ pub struct SettingsUpdate<'a> {
     pub fetch_interval: Option<i64>,
     pub paused: bool,
     pub next_fetch_at: Option<i64>,
+    pub user_agent: Option<&'a str>,
 }
 
 pub fn update_settings(conn: &Connection, id: i64, u: &SettingsUpdate) -> AppResult<()> {
     let changed = conn.execute(
         "UPDATE feeds SET custom_title = ?2, folder_id = ?3, fetch_interval = ?4, paused = ?5,
-                next_fetch_at = ?6
+                next_fetch_at = ?6, user_agent = ?7
          WHERE id = ?1",
         params![
             id,
@@ -316,13 +323,37 @@ pub fn update_settings(conn: &Connection, id: i64, u: &SettingsUpdate) -> AppRes
             u.folder_id,
             u.fetch_interval,
             u.paused,
-            u.next_fetch_at
+            u.next_fetch_at,
+            u.user_agent
         ],
     )?;
     if changed == 0 {
         return Err(AppError::not_found(format!("Feed {id} not found")));
     }
     Ok(())
+}
+
+/// Points a feed at a new address (SPEC §6.1 "Edit URL"): cached validators and the error
+/// state are reset so the next fetch starts clean.
+pub fn change_url(conn: &Connection, id: i64, url: &str) -> AppResult<()> {
+    let result = conn.execute(
+        "UPDATE feeds SET url = ?2, etag = NULL, last_modified = NULL, error_count = 0,
+                last_error = NULL
+         WHERE id = ?1",
+        params![id, url],
+    );
+    match result {
+        Ok(0) => Err(AppError::not_found(format!("Feed {id} not found"))),
+        Ok(_) => Ok(()),
+        Err(rusqlite::Error::SqliteFailure(e, _))
+            if e.code == rusqlite::ErrorCode::ConstraintViolation =>
+        {
+            Err(AppError::conflict(
+                "You're already subscribed to that address",
+            ))
+        }
+        Err(err) => Err(err.into()),
+    }
 }
 
 /// Deletes a feed and its articles, except starred ones, which move to the "Deleted feeds"
@@ -378,4 +409,42 @@ pub fn reorder(tx: &Transaction, feeds: &[FeedPlacement]) -> AppResult<()> {
         stmt.execute(params![feed.id, index as i64, feed.folder_id])?;
     }
     Ok(())
+}
+
+/// Every subscribed feed address (for skipping duplicates on import).
+pub fn all_urls(conn: &Connection) -> AppResult<HashSet<String>> {
+    let mut stmt = conn.prepare_cached("SELECT url FROM feeds")?;
+    let urls = stmt
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<HashSet<String>, _>>()?;
+    Ok(urls)
+}
+
+/// A feed as OPML export needs it, in sidebar order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportRow {
+    pub folder_id: Option<i64>,
+    pub title: String,
+    pub custom_title: Option<String>,
+    pub url: String,
+    pub site_url: Option<String>,
+}
+
+pub fn export_rows(conn: &Connection) -> AppResult<Vec<ExportRow>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT folder_id, title, nullif(custom_title, ''), url, site_url FROM feeds
+         WHERE url != ?1 ORDER BY sort_order, title COLLATE NOCASE",
+    )?;
+    let rows = stmt
+        .query_map([DELETED_FEEDS_URL], |row| {
+            Ok(ExportRow {
+                folder_id: row.get(0)?,
+                title: row.get(1)?,
+                custom_title: row.get(2)?,
+                url: row.get(3)?,
+                site_url: row.get(4)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
 }

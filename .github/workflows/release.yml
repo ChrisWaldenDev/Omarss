@@ -4,9 +4,14 @@ name: Release
 # once CI has passed on that commit. (main only changes through PRs, so "push to main" means
 # "a PR was merged".) Pull requests that touch packaging run the same builds without publishing.
 #
-# Version: <major>.<minor> from src-tauri/tauri.conf.json, then the number of commits on main,
-# e.g. 0.1.42 (tag v0.1.42). Purely numeric, so it's valid for semver, .deb, .rpm and .msi, and
-# it always increases because main can't be force-pushed. See docs/DECISIONS.md.
+# Version: <major>.<minor> from src-tauri/tauri.conf.json, then a patch number that restarts at 0
+# for each minor version: the number of main's own commits (first parents, i.e. one per merged
+# PR) since the version in tauri.conf.json became <major>.<minor>. The merge that bumps the
+# version is released as <major>.<minor>.0 (tag v<major>.<minor>.0), the next merge as .1, and
+# so on, whether PRs are merged, squashed or rebased. No tag needs creating by hand. Purely
+# numeric, so it's valid for semver, .deb, .rpm and .msi, and it always increases because main
+# can't be force-pushed. 0.2 predates this and keeps counting from its "v0.2" marker tag, so its
+# numbers never go backwards; don't create marker tags for newer versions. See docs/DECISIONS.md.
 
 on:
   workflow_run:
@@ -59,7 +64,21 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           base=$(jq -r .version src-tauri/tauri.conf.json)
-          version="${base%.*}.$(git rev-list --count HEAD)"
+          major_minor="${base%.*}"
+          marker="v$major_minor"
+          if git rev-parse -q --verify "refs/tags/$marker" >/dev/null; then
+            # Legacy marker tag (only v0.2): commits since the tag.
+            patch=$(git rev-list --count "$marker..HEAD")
+          else
+            # Walk main's first-parent history back to where this minor version began.
+            patch=-1
+            for commit in $(git rev-list --first-parent HEAD); do
+              v=$(git show "$commit:src-tauri/tauri.conf.json" 2>/dev/null | jq -r .version 2>/dev/null || true)
+              [ "${v%.*}" = "$major_minor" ] || break
+              patch=$((patch + 1))
+            done
+          fi
+          version="$major_minor.$patch"
           tag="v$version"
           build=true
           publish=false
