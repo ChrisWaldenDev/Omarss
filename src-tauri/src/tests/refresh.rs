@@ -453,6 +453,73 @@ async fn discovery_finds_linked_feeds_then_common_paths() {
 }
 
 #[tokio::test]
+async fn discovery_ignores_wordpress_rest_links_but_keeps_json_feeds() {
+    let server = MockServer::start().await;
+    let page = |links: &str| {
+        ResponseTemplate::new(200).set_body_raw(
+            format!("<!doctype html><html><head>{links}</head><body></body></html>"),
+            "text/html; charset=utf-8",
+        )
+    };
+    // A WordPress page: its RSS feed plus the REST API link every WP page carries.
+    mount(
+        &server,
+        "/about/",
+        page(
+            r#"<link rel="alternate" type="application/rss+xml" title="Blog" href="/feed/">
+               <link rel="alternate" type="application/json" href="/wp-json/wp/v2/pages/42">
+               <link rel="https://api.w.org/" href="/wp-json/">"#,
+        ),
+    )
+    .await;
+    mount(
+        &server,
+        "/wp-json/wp/v2/pages/42",
+        ResponseTemplate::new(200).set_body_raw(
+            r#"{"id":42,"slug":"about","title":{"rendered":"About"}}"#,
+            "application/json",
+        ),
+    )
+    .await;
+    // A JSON Feed 1.0 advertised as plain application/json is still found.
+    mount(
+        &server,
+        "/json-site/",
+        page(r#"<link rel="alternate" type="application/json" href="/feed.json">"#),
+    )
+    .await;
+    mount(
+        &server,
+        "/feed.json",
+        ResponseTemplate::new(200).set_body_raw(
+            r#"{"version":"https://jsonfeed.org/version/1","title":"JSON Blog",
+                "items":[{"id":"1","content_text":"hi"}]}"#,
+            "application/json",
+        ),
+    )
+    .await;
+    let app = TestApp::new();
+
+    let found = app
+        .feeds
+        .discover(&format!("{}/about/", server.uri()))
+        .await
+        .unwrap();
+    let urls: Vec<&str> = found.iter().map(|f| f.url.as_str()).collect();
+    assert_eq!(urls, [format!("{}/feed/", server.uri())]);
+    assert_eq!(found[0].title.as_deref(), Some("Blog"));
+
+    let json = app
+        .feeds
+        .discover(&format!("{}/json-site/", server.uri()))
+        .await
+        .unwrap();
+    assert_eq!(json.len(), 1);
+    assert_eq!(json[0].url, format!("{}/feed.json", server.uri()));
+    assert_eq!(json[0].title.as_deref(), Some("JSON Blog"));
+}
+
+#[tokio::test]
 async fn preview_shows_the_five_newest_items() {
     let server = MockServer::start().await;
     let items: String = (1..=8)
