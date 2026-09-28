@@ -23,12 +23,19 @@ pub struct NewArticle {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct UpsertStats {
     pub inserted: usize,
+    /// Articles whose content changed (the content hash differs).
     pub updated: usize,
+    /// Articles with the same content but a changed link, author, update time or
+    /// enclosures. These are rewritten silently: they never count as updated, so they
+    /// don't mark anything unread or announce new articles.
+    pub metadata_updated: usize,
 }
 
 /// Inserts new articles and updates changed ones (SPEC §7.4). Articles are matched on
-/// `(feed_id, guid)`; an existing article is only rewritten when its content hash changed,
-/// and keeps its read/star state unless `mark_updated_unread` is set.
+/// `(feed_id, guid)`; an existing article is rewritten when its content hash changed, and
+/// keeps its read/star state unless `mark_updated_unread` is set. When only the metadata
+/// (url, author, updated_at, enclosures) changed, just that is written and read state is
+/// untouched. `published_at` is never rewritten, so list order stays stable.
 pub fn upsert(
     tx: &Transaction,
     feed_id: i64,
@@ -37,8 +44,10 @@ pub fn upsert(
     mark_updated_unread: bool,
 ) -> AppResult<UpsertStats> {
     let mut stats = UpsertStats::default();
-    let mut find = tx
-        .prepare_cached("SELECT id, content_hash FROM articles WHERE feed_id = ?1 AND guid = ?2")?;
+    let mut find = tx.prepare_cached(
+        "SELECT id, content_hash, url, author, updated_at FROM articles
+         WHERE feed_id = ?1 AND guid = ?2",
+    )?;
     let mut insert = tx.prepare_cached(
         "INSERT INTO articles (feed_id, guid, url, title, author, summary_html, content_html,
                                published_at, updated_at, fetched_at, content_hash)
@@ -51,10 +60,19 @@ pub fn upsert(
                 read_at = CASE WHEN ?9 THEN NULL ELSE read_at END
          WHERE id = ?1",
     )?;
+    let mut update_metadata = tx.prepare_cached(
+        "UPDATE articles SET url = ?2, author = ?3, updated_at = ?4 WHERE id = ?1",
+    )?;
     for item in items {
-        let existing: Option<(i64, Option<String>)> = find
+        let existing: Option<StoredArticle> = find
             .query_row(params![feed_id, item.guid], |row| {
-                Ok((row.get(0)?, row.get(1)?))
+                Ok(StoredArticle {
+                    id: row.get(0)?,
+                    content_hash: row.get(1)?,
+                    url: row.get(2)?,
+                    author: row.get(3)?,
+                    updated_at: row.get(4)?,
+                })
             })
             .optional()?;
         let article_id = match existing {
@@ -75,8 +93,28 @@ pub fn upsert(
                 stats.inserted += 1;
                 tx.last_insert_rowid()
             }
-            Some((_, Some(hash))) if hash == item.content_hash => continue,
-            Some((id, _)) => {
+            Some(stored) if stored.content_hash.as_deref() == Some(item.content_hash.as_str()) => {
+                let fields_changed = stored.url != item.url
+                    || stored.author != item.author
+                    || stored.updated_at != item.updated_at;
+                let enclosures_changed = enclosures(tx, stored.id)? != item.enclosures;
+                if fields_changed {
+                    update_metadata.execute(params![
+                        stored.id,
+                        item.url,
+                        item.author,
+                        item.updated_at
+                    ])?;
+                }
+                if enclosures_changed {
+                    replace_enclosures(tx, stored.id, &item.enclosures)?;
+                }
+                if fields_changed || enclosures_changed {
+                    stats.metadata_updated += 1;
+                }
+                continue;
+            }
+            Some(StoredArticle { id, .. }) => {
                 update.execute(params![
                     id,
                     item.url,
@@ -95,6 +133,31 @@ pub fn upsert(
         replace_enclosures(tx, article_id, &item.enclosures)?;
     }
     Ok(stats)
+}
+
+/// The columns `upsert` compares against an incoming item.
+struct StoredArticle {
+    id: i64,
+    content_hash: Option<String>,
+    url: Option<String>,
+    author: Option<String>,
+    updated_at: Option<i64>,
+}
+
+fn enclosures(conn: &Connection, article_id: i64) -> AppResult<Vec<Enclosure>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT url, mime_type, length FROM enclosures WHERE article_id = ?1 ORDER BY id",
+    )?;
+    let rows = stmt
+        .query_map([article_id], |row| {
+            Ok(Enclosure {
+                url: row.get(0)?,
+                mime_type: row.get(1)?,
+                length: row.get(2)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
 }
 
 fn replace_enclosures(
@@ -242,18 +305,7 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<ArticleRow> {
         )
         .optional()?
         .ok_or_else(|| AppError::not_found(format!("Article {id} not found")))?;
-    let mut stmt = conn.prepare_cached(
-        "SELECT url, mime_type, length FROM enclosures WHERE article_id = ?1 ORDER BY id",
-    )?;
-    article.enclosures = stmt
-        .query_map([id], |row| {
-            Ok(Enclosure {
-                url: row.get(0)?,
-                mime_type: row.get(1)?,
-                length: row.get(2)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
+    article.enclosures = enclosures(conn, id)?;
     Ok(article)
 }
 

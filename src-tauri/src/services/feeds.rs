@@ -374,6 +374,13 @@ impl FeedService {
                 Ok(stats)
             })
             .await?;
+        if stats.metadata_updated > 0 {
+            tracing::debug!(
+                feed = id,
+                count = stats.metadata_updated,
+                "updated article metadata"
+            );
+        }
         self.refresh_icon(
             id,
             feed.icon_path.clone(),

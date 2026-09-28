@@ -279,6 +279,78 @@ async fn upsert_deduplicates_on_guid_and_only_rewrites_changed_articles() {
 }
 
 #[tokio::test]
+async fn metadata_changes_without_content_changes_are_stored_but_keep_read_state() {
+    let app = TestApp::new();
+    let now = clock::now_unix();
+    let id = seed(&app, "https://pod.example/feed", None, 0, now).await;
+    // Runs one upsert and returns its stats plus the number of rows SQLite changed.
+    let run = |items: Vec<NewArticle>| {
+        let store = app.store.clone();
+        async move {
+            store
+                .run(move |conn| {
+                    let before = conn.total_changes();
+                    let tx = conn.transaction()?;
+                    // `mark_updated_unread` on: a metadata-only change must still not
+                    // mark anything unread.
+                    let stats = articles::upsert(&tx, id, &items, now, true)?;
+                    tx.commit()?;
+                    Ok((stats, conn.total_changes() - before))
+                })
+                .await
+                .unwrap()
+        }
+    };
+    let episode = |mp3: &str, url: &str, author: Option<&str>| {
+        let mut a = article("ep1", now - 60, "show notes");
+        a.url = Some(url.into());
+        a.author = author.map(Into::into);
+        a.enclosures = vec![Enclosure {
+            url: mp3.into(),
+            mime_type: Some("audio/mpeg".into()),
+            length: Some(100),
+        }];
+        a
+    };
+    let original = episode("https://cdn.example/ep1.mp3", "https://pod.example/1", None);
+    let (stats, _) = run(vec![original.clone()]).await;
+    assert_eq!(stats.inserted, 1);
+    let article_id = app
+        .articles
+        .list(query(View::Feed { id }, false), None, 10)
+        .await
+        .unwrap()
+        .items[0]
+        .id;
+    app.articles.set_read(vec![article_id], true).await.unwrap();
+
+    // Same content, new enclosure URL, link and author.
+    let moved = episode(
+        "https://cdn2.example/ep1.mp3",
+        "https://pod.example/episodes/1",
+        Some("Host"),
+    );
+    let (stats, _) = run(vec![moved.clone()]).await;
+    assert_eq!(
+        (stats.inserted, stats.updated, stats.metadata_updated),
+        (0, 0, 1),
+        "a metadata change is not an update"
+    );
+    let full = app.articles.get(article_id).await.unwrap();
+    assert!(full.is_read, "read state is kept");
+    assert_eq!(full.url.as_deref(), Some("https://pod.example/episodes/1"));
+    assert_eq!(full.author.as_deref(), Some("Host"));
+    assert_eq!(full.enclosures, moved.enclosures);
+    assert_eq!(full.published_at, Some(now - 60));
+
+    // Fetching the same item again rewrites nothing.
+    let (stats, changes) = run(vec![moved]).await;
+    assert_eq!(stats, articles::UpsertStats::default());
+    assert_eq!(changes, 0, "an unchanged item writes no rows");
+    assert!(app.articles.get(article_id).await.unwrap().is_read);
+}
+
+#[tokio::test]
 async fn unsubscribing_keeps_starred_articles_under_deleted_feeds() {
     let app = TestApp::new();
     let now = clock::now_unix();
