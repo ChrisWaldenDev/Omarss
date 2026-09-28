@@ -9,11 +9,18 @@
   import type { FeedDetails } from "../types";
   import Dialog from "./Dialog.svelte";
 
-  let { feedId, onclose }: { feedId: number; onclose: () => void } = $props();
+  let {
+    feedId,
+    focusUrl = false,
+    onclose,
+  }: { feedId: number; focusUrl?: boolean; onclose: () => void } = $props();
 
   const INTERVALS = [900, 1800, 3600, 7200, 21600, 0] as const;
 
   let details = $state<FeedDetails | null>(null);
+  let url = $state("");
+  let userAgent = $state("");
+  let urlInput = $state<HTMLInputElement>();
   let name = $state("");
   let folderId = $state<number | null>(null);
   let interval = $state<number | null>(null);
@@ -26,6 +33,8 @@
       .getFeed(feedId)
       .then((feed) => {
         details = feed;
+        url = feed.url;
+        userAgent = feed.userAgent ?? "";
         name = feed.customTitle ?? feed.title;
         folderId = feed.folderId;
         interval = feed.fetchInterval;
@@ -40,10 +49,12 @@
     error = null;
     try {
       await api.updateFeed(feedId, {
+        url: url.trim(),
         customTitle: name.trim() && name.trim() !== details.title ? name.trim() : null,
         folderId,
         fetchInterval: interval,
         paused,
+        userAgent: userAgent.trim() || null,
       });
       onclose();
       await sidebar.load();
@@ -54,6 +65,14 @@
       saving = false;
     }
   }
+
+  // From "Broken feeds → Edit URL": start in the address field.
+  $effect(() => {
+    if (focusUrl && urlInput) {
+      urlInput.focus();
+      urlInput.select();
+    }
+  });
 
   function unsubscribe() {
     if (!details) return;
@@ -95,7 +114,10 @@
       </label>
       <label class="field">
         <span>{t("editFeed.address")}</span>
-        <input type="text" value={details.url} readonly />
+        <input type="url" bind:value={url} bind:this={urlInput} spellcheck="false" required />
+        {#if url.trim() !== details.url}
+          <span class="hint">{t("editFeed.addressChanged")}</span>
+        {/if}
       </label>
       <label class="field">
         <span>{t("editFeed.folder")}</span>
@@ -119,6 +141,19 @@
         <input type="checkbox" bind:checked={paused} />
         {t("editFeed.paused")}
       </label>
+      <details class="advanced" open={!!details.userAgent}>
+        <summary>{t("editFeed.advanced")}</summary>
+        <label class="field">
+          <span>{t("editFeed.userAgent")}</span>
+          <input
+            type="text"
+            bind:value={userAgent}
+            placeholder={t("editFeed.userAgent.placeholder")}
+            spellcheck="false"
+          />
+          <span class="hint">{t("editFeed.userAgent.hint")}</span>
+        </label>
+      </details>
       <p class="status">
         {details.lastFetchedAt !== null
           ? t("editFeed.lastFetched", { time: relativeTime(details.lastFetchedAt, clock.now) })
@@ -148,6 +183,23 @@
     align-items: center;
     gap: 8px;
     margin-bottom: 12px;
+  }
+
+  .hint {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: normal;
+  }
+
+  .advanced {
+    margin-bottom: 12px;
+  }
+
+  .advanced summary {
+    margin-bottom: 10px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
   }
 
   .status {

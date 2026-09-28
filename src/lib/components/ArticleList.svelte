@@ -1,12 +1,15 @@
 <script lang="ts">
+  import { attempt, markAllRead, openInBrowser, share } from "../actions";
   import { relativeTime } from "../format";
   import { t } from "../i18n";
   import { articles } from "../stores/app.svelte";
   import { clock } from "../stores/clock.svelte";
   import { dialogs } from "../stores/dialogs.svelte";
+  import { settings } from "../stores/settings.svelte";
   import { sidebar } from "../stores/sidebar.svelte";
   import type { ArticleListItem } from "../types";
   import { viewTitle } from "../views";
+  import ContextMenu, { type MenuItem } from "./ContextMenu.svelte";
   import FeedIcon from "./FeedIcon.svelte";
   import Icon from "./Icon.svelte";
   import VirtualList from "./VirtualList.svelte";
@@ -36,6 +39,62 @@
     void articles.sort;
     list?.scrollToTop();
   });
+
+  // ---- Menus -------------------------------------------------------------------------------
+  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+
+  function markAllMenu(event: MouseEvent) {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = {
+      x: box.right - 200,
+      y: box.bottom + 4,
+      items: [
+        { label: t("markAll.all"), action: () => markAllRead(null) },
+        { label: t("markAll.day"), action: () => markAllRead("day") },
+        { label: t("markAll.week"), action: () => markAllRead("week") },
+      ],
+    };
+  }
+
+  function rowMenu(event: MouseEvent, item: ArticleListItem) {
+    event.preventDefault();
+    menu = {
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        { label: t("menu.openArticle"), action: () => attempt(() => articles.open(item.id)) },
+        {
+          label: item.isRead ? t("reader.markUnread") : t("reader.markRead"),
+          action: () => attempt(() => articles.setRead(item.id, !item.isRead)),
+        },
+        {
+          label: item.isStarred ? t("reader.unstar") : t("reader.star"),
+          action: () => attempt(() => articles.toggleStar(item.id)),
+        },
+        { label: t("reader.openOriginal"), action: () => openInBrowser(item.id) },
+        { label: t("share.copyLink"), action: () => share(item.id, "link") },
+      ],
+    };
+  }
+
+  // ---- "Mark as read on scroll" (SPEC §6.2) ------------------------------------------------
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a batch buffer, not state
+  const pending = new Set<number>();
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function onScrollPast(rows: number) {
+    if (settings.current?.markReadMode !== "onScroll") return;
+    for (const item of articles.items.slice(0, rows)) {
+      if (!item.isRead) pending.add(item.id);
+    }
+    if (pending.size === 0 || flushTimer) return;
+    flushTimer = setTimeout(() => {
+      flushTimer = null;
+      const ids = [...pending];
+      pending.clear();
+      void attempt(() => articles.markScrolledPast(ids));
+    }, 400);
+  }
 </script>
 
 <section class="list-pane" aria-label={t("list.label")}>
@@ -52,6 +111,15 @@
           >
         </div>
       {/if}
+      <button
+        class="icon-button"
+        title={t("markAll.title")}
+        aria-label={t("markAll.title")}
+        aria-haspopup="menu"
+        onclick={markAllMenu}
+      >
+        <Icon name="checkAll" />
+      </button>
       <button
         class="icon-button"
         title={t(`list.sort.${articles.sort}`)}
@@ -96,15 +164,28 @@
       label={t("list.label")}
       revealIndex={selectedIndex >= 0 ? selectedIndex : null}
       onEndReached={() => articles.loadMore()}
+      {onScrollPast}
     >
       {#snippet row(item)}
         {@const feed = sidebar.feed(item.feedId)}
         <button
           class="row"
           class:unread={!item.isRead}
+          class:with-thumbnail={item.thumbnail !== null}
+          data-article-row
           aria-current={articles.selectedId === item.id ? "true" : undefined}
           onclick={() => articles.open(item.id)}
+          oncontextmenu={(e) => rowMenu(e, item)}
         >
+          {#if item.thumbnail}
+            <img
+              class="thumbnail"
+              src={item.thumbnail}
+              alt=""
+              loading="lazy"
+              onerror={(e) => e.currentTarget.classList.add("failed")}
+            />
+          {/if}
           <span class="meta">
             <FeedIcon title={item.feedTitle} icon={feed?.icon ?? null} size={14} />
             <span class="feed">{item.feedTitle}</span>
@@ -134,6 +215,10 @@
     {/if}
   {/if}
 </section>
+
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onclose={() => (menu = null)} />
+{/if}
 
 <style>
   .list-pane {
@@ -256,6 +341,7 @@
   }
 
   .row {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -271,6 +357,25 @@
 
   .row:hover {
     background: var(--bg-hover);
+  }
+
+  .row.with-thumbnail {
+    padding-right: 92px;
+  }
+
+  .thumbnail {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 68px;
+    height: 68px;
+    border-radius: var(--radius);
+    background: var(--bg-hover);
+    object-fit: cover;
+  }
+
+  .thumbnail:global(.failed) {
+    visibility: hidden;
   }
 
   .row[aria-current="true"] {

@@ -11,6 +11,7 @@
     onEndReached,
     revealIndex = null,
     label,
+    onScrollPast,
   }: {
     items: T[];
     rowHeight: number;
@@ -21,6 +22,8 @@
     /** Scrolls this row into view when it changes. */
     revealIndex?: number | null;
     label?: string;
+    /** Called after the user scrolls, with how many rows are now entirely above the top. */
+    onScrollPast?: (rows: number) => void;
   } = $props();
 
   let viewport = $state<HTMLElement>();
@@ -55,7 +58,10 @@
   class="viewport"
   bind:this={viewport}
   bind:clientHeight={height}
-  onscroll={() => (scrollTop = viewport?.scrollTop ?? 0)}
+  onscroll={() => {
+    scrollTop = viewport?.scrollTop ?? 0;
+    onScrollPast?.(Math.floor(scrollTop / rowHeight));
+  }}
   role="list"
   aria-label={label}
 >

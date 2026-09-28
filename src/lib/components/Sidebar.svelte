@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { exportOpml, importOpml } from "../actions";
   import { api, errorMessage } from "../api";
   import { relativeTime } from "../format";
   import { t } from "../i18n";
@@ -10,14 +11,11 @@
   import { sidebar } from "../stores/sidebar.svelte";
   import { toasts } from "../stores/toasts.svelte";
   import type { FeedNode, FolderNode, Sidebar, View } from "../types";
-  import { sameView } from "../views";
+  import { brokenFeeds, isBroken, sameView } from "../views";
   import ContextMenu, { type MenuItem } from "./ContextMenu.svelte";
   import FeedIcon from "./FeedIcon.svelte";
   import Icon, { type IconName } from "./Icon.svelte";
   import ThemeSwitcher from "./ThemeSwitcher.svelte";
-
-  /** Feeds with this many consecutive errors get a warning (SPEC §6.1). */
-  const ERROR_THRESHOLD = 3;
 
   const counts = $derived(sidebar.data?.counts);
   const smartViews = $derived<{ view: View; icon: IconName; label: string; count?: number }[]>([
@@ -37,8 +35,24 @@
           : "",
   );
 
+  const broken = $derived(brokenFeeds(sidebar.data).length);
+
   function isCurrent(view: View): "page" | undefined {
-    return sameView(view, articles.view) ? "page" : undefined;
+    return !articles.brokenFeedsOpen && sameView(view, articles.view) ? "page" : undefined;
+  }
+
+  function appMenu(event: MouseEvent) {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    menu = {
+      x: box.left,
+      y: box.bottom + 4,
+      items: [
+        { label: t("menu.importOpml"), action: importOpml },
+        { label: t("menu.exportOpml"), action: exportOpml },
+        { label: t("menu.shortcuts"), action: () => dialogs.open({ kind: "shortcuts" }) },
+        { label: t("menu.settings"), action: () => dialogs.open({ kind: "settings" }) },
+      ],
+    };
   }
 
   // ---- Context menus ----------------------------------------------------------------------
@@ -226,7 +240,7 @@
         <FeedIcon title={feed.title} icon={feed.icon} />
       {/if}
       <span class="name">{deleted ? t("sidebar.deletedFeeds") : feed.title}</span>
-      {#if feed.errorCount >= ERROR_THRESHOLD}
+      {#if !deleted && isBroken(feed)}
         <span
           class="warning"
           title={feed.lastError ?? t("sidebar.feedErrors", { count: feed.errorCount })}
@@ -271,6 +285,15 @@
     >
       <Icon name="refresh" />
     </button>
+    <button
+      class="icon-button"
+      title={t("sidebar.more")}
+      aria-label={t("sidebar.more")}
+      aria-haspopup="menu"
+      onclick={appMenu}
+    >
+      <Icon name="more" />
+    </button>
   </header>
 
   <div class="scroll">
@@ -294,6 +317,19 @@
           </button>
         </li>
       {/each}
+      {#if broken > 0}
+        <li>
+          <button
+            class="item broken"
+            aria-current={articles.brokenFeedsOpen ? "page" : undefined}
+            onclick={() => articles.showBrokenFeeds()}
+          >
+            <Icon name="warning" />
+            <span class="name">{t("broken.title")}</span>
+            {@render count(broken, t("broken.count", { count: broken }))}
+          </button>
+        </li>
+      {/if}
     </ul>
 
     <h2
@@ -379,7 +415,17 @@
       {#if refresh.offline && !refresh.running}<Icon name="offline" size={13} />{/if}
       {status}
     </span>
-    <ThemeSwitcher />
+    <div class="footer-row">
+      <ThemeSwitcher />
+      <button
+        class="icon-button"
+        title={t("menu.settings")}
+        aria-label={t("menu.settings")}
+        onclick={() => dialogs.open({ kind: "settings" })}
+      >
+        <Icon name="settings" />
+      </button>
+    </div>
   </footer>
 </nav>
 
@@ -591,6 +637,17 @@
     gap: 8px;
     padding: 10px 12px;
     border-top: 1px solid var(--border);
+  }
+
+  .footer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    align-self: stretch;
+  }
+
+  .item.broken :global(svg) {
+    color: var(--warning);
   }
 
   .status {
