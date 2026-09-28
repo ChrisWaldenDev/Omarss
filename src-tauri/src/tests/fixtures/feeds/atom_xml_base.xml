@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://based.example/blog/">
+  <title>Based</title>
+  <link href="./"/>
+  <link rel="self" href="feed.atom"/>
+  <icon>/icon.png</icon>
+  <id>urn:uuid:60a76c80-d399-11d9-b93C-0003939e0af6</id>
+  <updated>2024-09-01T00:00:00Z</updated>
+  <entry xml:base="2024/">
+    <title>Relative everything</title>
+    <link href="relative.html"/>
+    <id>urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a</id>
+    <updated>2024-09-01T00:00:00Z</updated>
+    <content type="html">&lt;p&gt;See &lt;a href="other.html"&gt;the other post&lt;/a&gt; and &lt;img src="../img/a.png" alt="a"&gt;.&lt;/p&gt;</content>
+  </entry>
+</feed>

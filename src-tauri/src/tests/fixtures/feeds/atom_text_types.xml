@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title type="html">Types &amp;amp; &lt;em&gt;Markup&lt;/em&gt;</title>
+  <id>urn:types</id>
+  <updated>2024-09-01T00:00:00Z</updated>
+  <link href="https://types.example/"/>
+  <entry>
+    <title type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">An <b>XHTML</b> title</div></title>
+    <id>urn:types:1</id>
+    <updated>2024-09-01T00:00:00Z</updated>
+    <link href="https://types.example/1"/>
+    <summary type="text">Plain &lt;not a tag&gt; summary</summary>
+    <content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Real <strong>XHTML</strong> content</p></div></content>
+  </entry>
+</feed>

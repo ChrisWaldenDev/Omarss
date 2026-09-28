@@ -18,13 +18,27 @@ const sidebar: Sidebar = {
           siteUrl: null,
           unreadCount: 0,
           errorCount: 0,
+          lastError: null,
+          icon: null,
+          paused: false,
         },
       ],
     },
   ],
   feeds: [
-    { id: 20, folderId: null, title: "At root", siteUrl: null, unreadCount: 0, errorCount: 0 },
+    {
+      id: 20,
+      folderId: null,
+      title: "At root",
+      siteUrl: null,
+      unreadCount: 0,
+      errorCount: 0,
+      lastError: null,
+      icon: null,
+      paused: false,
+    },
   ],
+  deletedFeeds: null,
 };
 
 describe("sameView", () => {

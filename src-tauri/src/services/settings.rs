@@ -31,10 +31,26 @@ impl Theme {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub theme: Theme,
+    /// Global refresh interval in minutes; `0` means manual refresh only (SPEC §6.5).
+    pub refresh_interval_minutes: u32,
+    pub refresh_on_startup: bool,
+    /// Mark an article unread again when its feed updates it (SPEC §7.4).
+    pub mark_updated_unread: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            refresh_interval_minutes: 30,
+            refresh_on_startup: true,
+            mark_updated_unread: false,
+        }
+    }
 }
 
 impl Settings {
@@ -131,7 +147,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("t.sqlite");
         let svc = SettingsService::new(Store::open(&db, dir.path()).unwrap());
-        let wanted = Settings { theme: Theme::Dark };
+        let wanted = Settings {
+            theme: Theme::Dark,
+            refresh_interval_minutes: 60,
+            ..Settings::default()
+        };
         assert_eq!(block_on(svc.update(wanted.clone())).unwrap(), wanted);
         drop(svc);
 
@@ -141,12 +161,20 @@ mod tests {
 
     #[test]
     fn stores_one_json_row_per_field() {
+        let settings = Settings {
+            theme: Theme::Light,
+            ..Settings::default()
+        };
+        let mut stored = settings.to_rows();
+        stored.sort();
         assert_eq!(
-            Settings {
-                theme: Theme::Light
-            }
-            .to_rows(),
-            rows(&[("theme", "\"light\"")])
+            stored,
+            rows(&[
+                ("markUpdatedUnread", "false"),
+                ("refreshIntervalMinutes", "30"),
+                ("refreshOnStartup", "true"),
+                ("theme", "\"light\""),
+            ])
         );
     }
 

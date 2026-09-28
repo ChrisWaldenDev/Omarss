@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.example/publish/formats/rss-0.91.dtd">
+<rss version="0.91">
+<channel>
+<title>Old School News</title>
+<link>http://oldschool.example/</link>
+<description>Since 1999</description>
+<language>en-us</language>
+<item>
+<title>Site redesign</title>
+<link>http://oldschool.example/redesign.html</link>
+<description>We have a new look.</description>
+</item>
+<item>
+<title>Guestbook back online</title>
+<link>http://oldschool.example/guestbook.html</link>
+</item>
+</channel>
+</rss>

@@ -2,6 +2,9 @@
 //!
 //! All SQL in the app lives under this module (SPEC §4.1).
 
+pub mod articles;
+pub mod feeds;
+pub mod folders;
 pub mod migrations;
 pub mod settings;
 

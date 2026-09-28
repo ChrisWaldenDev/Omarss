@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:code.example,2008:https://code.example/acme/widget/releases</id>
+  <link type="text/html" rel="alternate" href="https://code.example/acme/widget/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://code.example/acme/widget/releases.atom"/>
+  <title>Release notes from widget</title>
+  <updated>2024-08-05T14:00:00Z</updated>
+  <entry>
+    <id>tag:code.example,2008:Repository/1/v2.1.0</id>
+    <updated>2024-08-05T14:00:00Z</updated>
+    <link rel="alternate" type="text/html" href="https://code.example/acme/widget/releases/tag/v2.1.0"/>
+    <title>v2.1.0</title>
+    <content type="html">&lt;h2&gt;What&amp;#39;s changed&lt;/h2&gt;
+&lt;ul&gt;&lt;li&gt;Faster start-up by &lt;a class=&quot;user-mention&quot; href=&quot;https://code.example/bo&quot;&gt;@bo&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;</content>
+    <author><name>bo</name></author>
+    <media:thumbnail height="30" width="30" url="https://avatars.code.example/u/2?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:code.example,2008:Repository/1/v2.0.0</id>
+    <updated>2024-07-01T09:00:00Z</updated>
+    <link rel="alternate" type="text/html" href="https://code.example/acme/widget/releases/tag/v2.0.0"/>
+    <title>v2.0.0</title>
+    <content type="html">&lt;p&gt;Breaking changes.&lt;/p&gt;</content>
+    <author><name>acme-bot</name></author>
+  </entry>
+</feed>

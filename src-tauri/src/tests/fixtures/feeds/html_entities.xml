@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Entities&nbsp;Weekly &mdash; Issue&nbsp;1</title><link>https://entities.example/</link><description>x</description>
+<item><title>It&rsquo;s &ldquo;quoted&rdquo; &hellip;</title><guid>e1</guid><description>&lt;p&gt;caf&amp;eacute; &amp;amp; cr&amp;egrave;me&lt;/p&gt;</description></item>
+<item><title>Numeric &#8211; &#x2014; refs</title><guid>e2</guid></item>
+</channel></rss>

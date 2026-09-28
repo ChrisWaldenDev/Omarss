@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>Photo Stream</title><link>https://photos.example/</link><description>x</description>
+<item><title>Sunset</title><guid>p1</guid><link>https://photos.example/p1</link><media:content url="https://photos.example/full/p1.jpg" medium="image" type="image/jpeg" width="4000" height="3000" fileSize="3000000"/><media:thumbnail url="https://photos.example/thumb/p1.jpg" width="200" height="150"/></item>
+<item><title>Clip</title><guid>p2</guid><link>https://photos.example/p2</link><media:group><media:content url="https://photos.example/v/p2.mp4" type="video/mp4" fileSize="9000000"/><media:content url="https://photos.example/v/p2.webm" type="video/webm"/></media:group></item>
+</channel></rss>

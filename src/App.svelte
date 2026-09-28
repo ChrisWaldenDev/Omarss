@@ -3,11 +3,15 @@
 
   import { errorMessage } from "./lib/api";
   import ArticleList from "./lib/components/ArticleList.svelte";
+  import Dialogs from "./lib/components/Dialogs.svelte";
   import ReaderPane from "./lib/components/ReaderPane.svelte";
   import Sidebar from "./lib/components/Sidebar.svelte";
+  import Toasts from "./lib/components/Toasts.svelte";
   import { t } from "./lib/i18n";
-  import { articles } from "./lib/stores/articles.svelte";
+  import { listenThenLoad } from "./lib/startup";
+  import { articles, connectEvents } from "./lib/stores/app.svelte";
   import { clock } from "./lib/stores/clock.svelte";
+  import { refresh } from "./lib/stores/refresh.svelte";
   import { settings } from "./lib/stores/settings.svelte";
   import { sidebar } from "./lib/stores/sidebar.svelte";
   import { applyTheme } from "./lib/theme";
@@ -16,10 +20,19 @@
   let startError = $state<string | null>(null);
 
   onMount(() => {
-    Promise.all([settings.load(), sidebar.load(), articles.load()])
-      .catch((error) => (startError = errorMessage(error)))
-      .finally(() => (ready = true));
-    return clock.start();
+    const disconnect = listenThenLoad(connectEvents, () =>
+      Promise.all([settings.load(), sidebar.load(), articles.load(), refresh.load()])
+        .then(() => {})
+        .catch((error) => {
+          startError = errorMessage(error);
+        })
+        .finally(() => (ready = true)),
+    );
+    const stopClock = clock.start();
+    return () => {
+      disconnect();
+      stopClock();
+    };
   });
 
   $effect(() => {
@@ -35,13 +48,15 @@
     <ArticleList />
     <ReaderPane />
   </div>
+  <Dialogs />
+  <Toasts />
 {/if}
 
 <style>
   .layout {
     display: grid;
     grid-template-columns:
-      clamp(180px, 18vw, 280px)
+      clamp(200px, 18vw, 280px)
       clamp(260px, 28vw, 420px)
       minmax(0, 1fr);
     /* One row exactly the window's height; each pane scrolls on its own. */

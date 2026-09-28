@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:webfeeds="http://webfeeds.org/rss/1.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Kim</title>
+    <description>Public posts from @kim@social.example</description>
+    <link>https://social.example/@kim</link>
+    <image><url>https://files.social.example/avatars/kim.png</url><title>Kim</title><link>https://social.example/@kim</link></image>
+    <lastBuildDate>Tue, 10 Sep 2024 08:00:00 +0000</lastBuildDate>
+    <generator>Mastodon v4.2</generator>
+    <item>
+      <guid isPermaLink="true">https://social.example/@kim/112233</guid>
+      <link>https://social.example/@kim/112233</link>
+      <pubDate>Tue, 10 Sep 2024 08:00:00 +0000</pubDate>
+      <description>&lt;p&gt;Finally finished the quilt! Took three winters.&lt;/p&gt;</description>
+      <media:content url="https://files.social.example/media/quilt.jpg" type="image/jpeg" fileSize="204800" medium="image">
+        <media:rating scheme="urn:simple">nonadult</media:rating>
+        <media:description type="plain">A patchwork quilt</media:description>
+      </media:content>
+      <category>quilting</category>
+    </item>
+    <item>
+      <guid isPermaLink="true">https://social.example/@kim/112200</guid>
+      <link>https://social.example/@kim/112200</link>
+      <pubDate>Mon, 09 Sep 2024 20:00:00 +0000</pubDate>
+      <description>&lt;p&gt;Good morning&lt;/p&gt;</description>
+    </item>
+  </channel>
+</rss>

@@ -11,9 +11,15 @@ describe("api", () => {
   });
 
   it("calls the generated command and returns its data", async () => {
-    invoke.mockResolvedValue({ theme: "dark" });
-    await expect(api.updateSettings({ theme: "dark" })).resolves.toEqual({ theme: "dark" });
-    expect(invoke).toHaveBeenCalledWith("update_settings", { settings: { theme: "dark" } });
+    const settings = {
+      theme: "dark",
+      refreshIntervalMinutes: 30,
+      refreshOnStartup: true,
+      markUpdatedUnread: false,
+    } as const;
+    invoke.mockResolvedValue(settings);
+    await expect(api.updateSettings(settings)).resolves.toEqual(settings);
+    expect(invoke).toHaveBeenCalledWith("update_settings", { settings });
   });
 
   it("throws backend errors as ApiError with their kind", async () => {

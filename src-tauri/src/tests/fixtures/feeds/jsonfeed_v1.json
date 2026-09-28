@@ -1,0 +1,12 @@
+{
+  "version": "https://jsonfeed.org/version/1",
+  "title": "Micro Notes",
+  "home_page_url": "https://micro.example/",
+  "feed_url": "https://micro.example/feed.json",
+  "favicon": "https://micro.example/favicon.png",
+  "author": {"name": "Rin"},
+  "items": [
+    {"id": "https://micro.example/2024/09/10/note", "url": "https://micro.example/2024/09/10/note", "content_text": "Short note\n\nwith two paragraphs & an ampersand.", "date_published": "2024-09-10T07:00:00+02:00"},
+    {"id": "podcast-1", "title": "Audio note", "content_html": "<p>Listen</p>", "date_published": "2024-09-09T07:00:00+02:00", "attachments": [{"url": "https://micro.example/audio/1.m4a", "mime_type": "audio/x-m4a", "size_in_bytes": 1234567}]}
+  ]
+}

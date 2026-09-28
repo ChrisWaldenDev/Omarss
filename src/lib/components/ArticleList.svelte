@@ -1,20 +1,41 @@
 <script lang="ts">
   import { relativeTime } from "../format";
   import { t } from "../i18n";
-  import { articles } from "../stores/articles.svelte";
+  import { articles } from "../stores/app.svelte";
   import { clock } from "../stores/clock.svelte";
+  import { dialogs } from "../stores/dialogs.svelte";
   import { sidebar } from "../stores/sidebar.svelte";
+  import type { ArticleListItem } from "../types";
   import { viewTitle } from "../views";
   import FeedIcon from "./FeedIcon.svelte";
   import Icon from "./Icon.svelte";
+  import VirtualList from "./VirtualList.svelte";
 
-  const title = $derived(viewTitle(articles.view, sidebar.data));
+  /** Fixed row height keeps virtualised scrolling exact (SPEC §6.2). */
+  const ROW_HEIGHT = 100;
+
+  const title = $derived(
+    articles.view.kind === "feed" && articles.view.id === sidebar.data?.deletedFeeds?.id
+      ? t("sidebar.deletedFeeds")
+      : viewTitle(articles.view, sidebar.data),
+  );
   // The Starred view always lists every starred article, so the filter doesn't apply there.
   const filterable = $derived(articles.view.kind !== "starred" && articles.view.kind !== "unread");
   const unreadOnly = $derived(
     articles.view.kind === "unread" || (filterable && articles.unreadOnly),
   );
   const nextSort = $derived(articles.sort === "newestFirst" ? "oldestFirst" : "newestFirst");
+  const selectedIndex = $derived(articles.items.findIndex((i) => i.id === articles.selectedId));
+
+  let list = $state<ReturnType<typeof VirtualList<ArticleListItem>>>();
+
+  // New view or filter: start at the top.
+  $effect(() => {
+    void articles.view;
+    void articles.unreadOnly;
+    void articles.sort;
+    list?.scrollToTop();
+  });
 </script>
 
 <section class="list-pane" aria-label={t("list.label")}>
@@ -42,49 +63,75 @@
     </div>
   </header>
 
+  {#if articles.hasNewArticles}
+    <button class="new-articles" onclick={() => articles.load()}>
+      <Icon name="refresh" size={14} />
+      {t("list.showNew")}
+    </button>
+  {/if}
+
   {#if articles.listError}
     <p class="message error" role="alert">
       {t("list.loadError", { message: articles.listError })}
     </p>
+  {:else if sidebar.data && !sidebar.hasFeeds && !sidebar.data.deletedFeeds}
+    <div class="welcome">
+      <h2>{t("list.welcomeTitle")}</h2>
+      <p>{t("list.welcomeText")}</p>
+      <button class="button primary" onclick={() => dialogs.open({ kind: "addFeed" })}>
+        <Icon name="plus" size={14} />
+        {t("list.addFirstFeed")}
+      </button>
+    </div>
   {:else if articles.items.length === 0}
     <p class="message">
-      {unreadOnly ? t("list.emptyUnread") : t("list.empty")}
+      {articles.loading ? t("list.loading") : unreadOnly ? t("list.emptyUnread") : t("list.empty")}
     </p>
   {:else}
-    <ul class="items">
-      {#each articles.items as item (item.id)}
-        <li>
-          <button
-            class="row"
-            class:unread={!item.isRead}
-            aria-current={articles.selectedId === item.id ? "true" : undefined}
-            onclick={() => articles.open(item.id)}
-          >
-            <span class="meta">
-              <FeedIcon title={item.feedTitle} size={14} />
-              <span class="feed">{item.feedTitle}</span>
-              {#if item.publishedAt !== null}
-                <span class="time">{relativeTime(item.publishedAt, clock.now)}</span>
-              {/if}
-            </span>
-            <span class="headline">
-              {#if !item.isRead}
-                <span class="dot" aria-hidden="true"></span>
-                <span class="visually-hidden">{t("list.unread")}:</span>
-              {/if}
-              <span class="text">{item.title}</span>
-              {#if item.isStarred}
-                <span class="star" title={t("list.starred")}>
-                  <Icon name="star" size={13} filled />
-                  <span class="visually-hidden">{t("list.starred")}</span>
-                </span>
-              {/if}
-            </span>
-            <span class="summary">{item.summary}</span>
-          </button>
-        </li>
-      {/each}
-    </ul>
+    <VirtualList
+      bind:this={list}
+      items={articles.items}
+      rowHeight={ROW_HEIGHT}
+      key={(item) => item.id}
+      label={t("list.label")}
+      revealIndex={selectedIndex >= 0 ? selectedIndex : null}
+      onEndReached={() => articles.loadMore()}
+    >
+      {#snippet row(item)}
+        {@const feed = sidebar.feed(item.feedId)}
+        <button
+          class="row"
+          class:unread={!item.isRead}
+          aria-current={articles.selectedId === item.id ? "true" : undefined}
+          onclick={() => articles.open(item.id)}
+        >
+          <span class="meta">
+            <FeedIcon title={item.feedTitle} icon={feed?.icon ?? null} size={14} />
+            <span class="feed">{item.feedTitle}</span>
+            {#if item.publishedAt !== null}
+              <span class="time">{relativeTime(item.publishedAt, clock.now)}</span>
+            {/if}
+          </span>
+          <span class="headline" title={item.title}>
+            {#if !item.isRead}
+              <span class="dot" aria-hidden="true"></span>
+              <span class="visually-hidden">{t("list.unread")}:</span>
+            {/if}
+            <span class="text">{item.title}</span>
+            {#if item.isStarred}
+              <span class="star" title={t("list.starred")}>
+                <Icon name="star" size={13} filled />
+                <span class="visually-hidden">{t("list.starred")}</span>
+              </span>
+            {/if}
+          </span>
+          <span class="summary">{item.summary}</span>
+        </button>
+      {/snippet}
+    </VirtualList>
+    {#if articles.loadingMore}
+      <p class="loading-more">{t("list.loadingMore")}</p>
+    {/if}
   {/if}
 </section>
 
@@ -93,6 +140,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
     background: var(--bg-list);
     border-right: 1px solid var(--border);
   }
@@ -161,22 +209,50 @@
     color: var(--text);
   }
 
-  .message {
+  .new-articles {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 8px 12px 0;
+    padding: 5px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: var(--bg-selected);
+    color: var(--accent-text);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .message,
+  .loading-more {
     margin: 32px 16px;
     color: var(--text-muted);
     text-align: center;
+  }
+
+  .loading-more {
+    margin: 8px 16px;
+    font-size: 0.8rem;
   }
 
   .message.error {
     color: var(--danger);
   }
 
-  .items {
-    flex: 1;
-    margin: 0;
-    padding: 0;
-    overflow-y: auto;
-    list-style: none;
+  .welcome {
+    margin: 20vh 24px 0;
+    text-align: center;
+  }
+
+  .welcome h2 {
+    margin: 0 0 6px;
+    font-size: 1.1rem;
+  }
+
+  .welcome p {
+    margin: 0 0 16px;
+    color: var(--text-muted);
   }
 
   .row {
@@ -184,7 +260,8 @@
     flex-direction: column;
     gap: 3px;
     width: 100%;
-    padding: 10px 16px 11px;
+    height: 100%;
+    padding: 10px 16px;
     border: 0;
     border-bottom: 1px solid var(--border-subtle);
     background: none;
@@ -222,7 +299,7 @@
 
   .headline {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 6px;
     color: var(--text);
     font-size: 0.92rem;
@@ -243,17 +320,19 @@
     height: 7px;
     border-radius: 50%;
     background: var(--accent);
-    transform: translateY(-1px);
   }
 
   .text {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .star {
     display: grid;
     flex: none;
-    align-self: center;
     color: var(--star);
   }
 

@@ -29,10 +29,12 @@
   --border-subtle: #eceef1;
   --accent: #2f6fde;
   --accent-text: #1f5bc4;
+  --accent-contrast: #ffffff;
   --focus-ring: #2f6fde;
   --warning: #a35400;
   --danger: #c0262d;
   --star: #c98a00;
+  --shadow: 0 8px 28px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,10 +54,12 @@
     --border-subtle: #25282d;
     --accent: #6d9eff;
     --accent-text: #8fb4ff;
+    --accent-contrast: #0d1830;
     --focus-ring: #8fb4ff;
     --warning: #f0a04b;
     --danger: #ff7b80;
     --star: #f2c14e;
+    --shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.4);
   }
 }
 
@@ -75,10 +79,12 @@
   --border-subtle: #25282d;
   --accent: #6d9eff;
   --accent-text: #8fb4ff;
+  --accent-contrast: #0d1830;
   --focus-ring: #8fb4ff;
   --warning: #f0a04b;
   --danger: #ff7b80;
   --star: #f2c14e;
+  --shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.4);
 }
 
 *,
@@ -104,9 +110,77 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
   color: inherit;
+}
+
+input[type="text"],
+input[type="url"],
+input:not([type]),
+select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  font-weight: 500;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.button.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.button.danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.field > span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.form-error {
+  margin: 0 0 12px;
+  color: var(--danger);
+  font-size: 0.88rem;
 }
 
 button {

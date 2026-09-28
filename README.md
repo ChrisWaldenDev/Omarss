@@ -2,7 +2,7 @@
 
 A fast, keyboard-friendly desktop RSS/Atom reader for Linux and Windows. `SPEC.md` is the source of truth.
 
-**Status:** M1 (skeleton). The UI shows built-in demo data; real feeds arrive in M2.
+**Status:** M2 (local feeds). You can subscribe to feeds and websites, organise them into folders, and read, star and refresh them. Keyboard shortcuts, OPML, search, full text, notifications and sync follow in later milestones.
 
 ## Download
 
@@ -34,7 +34,7 @@ cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings && cargo
 
 | | Linux | Windows |
 |---|---|---|
-| Database, backups, logs | `~/.local/share/omarss/` (honours `XDG_DATA_HOME`) | `%LOCALAPPDATA%\omarss\` |
+| Database, favicons, backups, logs | `~/.local/share/omarss/` (honours `XDG_DATA_HOME`) | `%LOCALAPPDATA%\omarss\` |
 
 ## Troubleshooting
 
